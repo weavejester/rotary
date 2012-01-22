@@ -39,3 +39,11 @@
       (KeySchema. (key-schema-element name "S")))
      (.setProvisionedThroughput
       (provisioned-throughput 10 10)))))
+
+(defn list-tables
+  "Return a list of tables in DynamoDB."
+  [cred]
+  (-> (db-client cred)
+      .listTables
+      .getTableNames
+      seq))
