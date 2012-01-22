@@ -3,10 +3,12 @@
   (:import com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
+            AttributeValue
             CreateTableRequest
             KeySchema
             KeySchemaElement
-            ProvisionedThroughput]))
+            ProvisionedThroughput
+            PutItemRequest]))
 
 (defn- db-client
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
@@ -47,3 +49,26 @@
       .listTables
       .getTableNames
       seq))
+
+(defn- to-attr-value
+  "Convert a value into an AttributeValue object."
+  [value]
+  (cond
+   (string? value)
+   (doto (AttributeValue.) (.setS value))
+   (number? value)
+   (doto (AttributeValue.) (.setN value))))
+
+(defn- to-attr-map
+  "Convert a map's values into AttributeValue objects."
+  [value-map]
+  (into {} (for [[k v] value-map] [k (to-attr-value v)])))
+
+(defn put-item
+  "Add an item (a Clojure map) to a DynamoDB table."
+  [cred table item]
+  (.putItem
+   (db-client cred)
+   (doto (PutItemRequest.)
+     (.setTableName table)
+     (.setItem (to-attr-map item)))))
