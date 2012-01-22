@@ -1,10 +1,13 @@
 (ns rotary.client
   "Amazon DynamoDB client functions."
+  (:use [clojure.algo.generic.functor :only (fmap)])
   (:import com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
             CreateTableRequest
+            GetItemRequest
+            Key
             KeySchema
             KeySchemaElement
             ProvisionedThroughput
@@ -59,10 +62,13 @@
    (number? value)
    (doto (AttributeValue.) (.setN value))))
 
-(defn- to-attr-map
-  "Convert a map's values into AttributeValue objects."
-  [value-map]
-  (into {} (for [[k v] value-map] [k (to-attr-value v)])))
+(defn- get-value
+  "Get the value of an AttributeValue object."
+  [attr-value]
+  (or (.getS attr-value)
+      (.getN attr-value)
+      (.getNS attr-value)
+      (.getSS attr-value)))
 
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
@@ -71,4 +77,25 @@
    (db-client cred)
    (doto (PutItemRequest.)
      (.setTableName table)
-     (.setItem (to-attr-map item)))))
+     (.setItem (fmap to-attr-value item)))))
+
+(defn- item-key
+  "Create a Key object from a value."
+  [hash-key]
+  (Key. (to-attr-value hash-key)))
+
+(defn- get-result-value
+  "Get the value of a GetItemRequestResult."
+  [result]
+  (if-let [item (.getItem result)]
+    (fmap get-value (into {} item))))
+
+(defn get-item
+  "Retrieve an item from a DynamoDB table by its hash key."
+  [cred table hash-key]
+  (get-result-value
+   (.getItem
+    (db-client cred)
+    (doto (GetItemRequest.)
+      (.setTableName table)
+      (.setKey (item-key hash-key))))))
