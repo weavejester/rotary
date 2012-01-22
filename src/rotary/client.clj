@@ -38,7 +38,7 @@
    (doto (CreateTableRequest.)
      (.setTableName (str name))
      (.setKeySchema
-      (KeySchema. (key-schema-element name "S")))
+      (KeySchema. (key-schema-element hash-key "S")))
      (.setProvisionedThroughput
       (provisioned-throughput 10 10)))))
 
