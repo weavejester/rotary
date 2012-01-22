@@ -1,5 +1,5 @@
-(ns rotary.test.core
-  (:use [rotary.core])
+(ns rotary.test.client
+  (:use [rotary.client])
   (:use [clojure.test]))
 
 (deftest replace-me ;; FIXME: write
