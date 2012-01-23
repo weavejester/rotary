@@ -1,6 +1,7 @@
 (ns rotary.client
   "Amazon DynamoDB client functions."
   (:use [clojure.algo.generic.functor :only (fmap)])
+  (:require [clojure.string :as str])
   (:import com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
@@ -24,29 +25,29 @@
 
 (defn- key-schema-element
   "Create a KeySchemaElement object."
-  [name type]
+  [[key-name type]]
   (doto (KeySchemaElement.)
-    (.setAttributeName (str name))
-    (.setAttributeType (str type))))
+    (.setAttributeName (str key-name))
+    (.setAttributeType (str/upper-case (name type)))))
 
 (defn- provisioned-throughput
   "Created a ProvisionedThroughput object."
-  [read-units write-units]
+  [{read-units :read, write-units :write}]
   (doto (ProvisionedThroughput.)
     (.setReadCapacityUnits (long read-units))
     (.setWriteCapacityUnits (long write-units))))
 
 (defn create-table
-  "Create a table in DynamoDB with the given name and hash-key."
-  [cred name hash-key]
+  "Create a table in DynamoDB witht che given name and hash-key."
+  [cred name & {:keys [hash-key throughput]}]
   (.createTable
    (db-client cred)
    (doto (CreateTableRequest.)
      (.setTableName (str name))
      (.setKeySchema
-      (KeySchema. (key-schema-element hash-key "S")))
+      (KeySchema. (key-schema-element hash-key)))
      (.setProvisionedThroughput
-      (provisioned-throughput 10 10)))))
+      (provisioned-throughput throughput)))))
 
 (defn delete-table
   "Delete a table in DyanmoDB with the given name."
