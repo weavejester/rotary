@@ -7,6 +7,7 @@
             AttributeValue
             CreateTableRequest
             DeleteTableRequest
+            DeleteItemRequest
             GetItemRequest
             Key
             KeySchema
@@ -109,6 +110,13 @@
      (doto (GetItemRequest.)
        (.setTableName table)
        (.setKey (item-key hash-key)))))))
+
+(defn delete-item
+  "Delete an item from a DynamoDB table by its hash key."
+  [cred table hash-key]
+  (.deleteItem
+   (db-client cred)
+   (DeleteItemRequest. table (item-key hash-key))))
 
 (defn scan
   "Return the items in a DynamoDB table."
