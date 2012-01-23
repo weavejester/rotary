@@ -11,7 +11,8 @@
             KeySchema
             KeySchemaElement
             ProvisionedThroughput
-            PutItemRequest]))
+            PutItemRequest
+            ScanRequest]))
 
 (defn- db-client
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
@@ -70,6 +71,12 @@
       (.getNS attr-value)
       (.getSS attr-value)))
 
+(defn- to-map
+  "Turn a item in DynamoDB into a Clojure map."
+  [item]
+  (if item
+    (fmap get-value (into {} item))))
+
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
   [cred table item]
@@ -84,18 +91,22 @@
   [hash-key]
   (Key. (to-attr-value hash-key)))
 
-(defn- get-result-value
-  "Get the value of a GetItemRequestResult."
-  [result]
-  (if-let [item (.getItem result)]
-    (fmap get-value (into {} item))))
-
 (defn get-item
   "Retrieve an item from a DynamoDB table by its hash key."
   [cred table hash-key]
-  (get-result-value
+  (to-map
    (.getItem
-    (db-client cred)
-    (doto (GetItemRequest.)
-      (.setTableName table)
-      (.setKey (item-key hash-key))))))
+    (.getItem
+     (db-client cred)
+     (doto (GetItemRequest.)
+       (.setTableName table)
+       (.setKey (item-key hash-key)))))))
+
+(defn scan
+  "Return the items in a DynamoDB table."
+  [cred table]
+  (map to-map
+       (.getItems
+        (.scan
+         (db-client cred)
+         (ScanRequest. table)))))
