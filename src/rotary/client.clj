@@ -6,6 +6,7 @@
            [com.amazonaws.services.dynamodb.model
             AttributeValue
             CreateTableRequest
+            DeleteTableRequest
             GetItemRequest
             Key
             KeySchema
@@ -45,6 +46,13 @@
       (KeySchema. (key-schema-element hash-key "S")))
      (.setProvisionedThroughput
       (provisioned-throughput 10 10)))))
+
+(defn delete-table
+  "Delete a table in DyanmoDB with the given name."
+  [cred name]
+  (.deleteTable
+   (db-client cred)
+   (DeleteTableRequest. name)))
 
 (defn list-tables
   "Return a list of tables in DynamoDB."
