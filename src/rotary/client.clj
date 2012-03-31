@@ -38,7 +38,7 @@
     (.setWriteCapacityUnits (long write-units))))
 
 (defn create-table
-  "Create a table in DynamoDB witht che given name and hash-key."
+  "Create a table in DynamoDB with the given name and hash-key."
   [cred name & {:keys [hash-key throughput]}]
   (.createTable
    (db-client cred)
@@ -50,7 +50,7 @@
       (provisioned-throughput throughput)))))
 
 (defn delete-table
-  "Delete a table in DyanmoDB with the given name."
+  "Delete a table in DynamoDB with the given name."
   [cred name]
   (.deleteTable
    (db-client cred)
