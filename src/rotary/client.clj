@@ -11,6 +11,7 @@
             DeleteTableRequest
             DeleteItemRequest
             GetItemRequest
+            GetItemResult
             Key
             KeySchema
             KeySchemaElement
@@ -23,6 +24,9 @@
   [cred]
   (AmazonDynamoDBClient.
    (BasicAWSCredentials. (:access-key cred) (:secret-key cred))))
+
+(defprotocol AsMap
+  (as-map [x]))
 
 (defn- key-schema-element
   "Create a KeySchemaElement object."
@@ -92,11 +96,16 @@
       (.getNS attr-value)
       (.getSS attr-value)))
 
-(defn- to-map
+(defn- item-map
   "Turn a item in DynamoDB into a Clojure map."
   [item]
   (if item
     (fmap get-value (into {} item))))
+
+(extend-protocol AsMap
+  GetItemResult
+  (as-map [result]
+    (item-map (.getItem result))))
 
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
@@ -115,13 +124,12 @@
 (defn get-item
   "Retrieve an item from a DynamoDB table by its hash key."
   [cred table hash-key]
-  (to-map
+  (as-map
    (.getItem
-    (.getItem
-     (db-client cred)
-     (doto (GetItemRequest.)
-       (.setTableName table)
-       (.setKey (item-key hash-key)))))))
+    (db-client cred)
+    (doto (GetItemRequest.)
+      (.setTableName table)
+      (.setKey (item-key hash-key))))))
 
 (defn delete-item
   "Delete an item from a DynamoDB table by its hash key."
@@ -133,7 +141,7 @@
 (defn scan
   "Return the items in a DynamoDB table."
   [cred table]
-  (map to-map
+  (map item-map
        (.getItems
         (.scan
          (db-client cred)
