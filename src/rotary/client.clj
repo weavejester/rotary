@@ -68,6 +68,17 @@
       (provisioned-throughput throughput)))))
 
 (extend-protocol AsMap
+  KeySchemaElement
+  (as-map [element]
+    {:name (.getAttributeName element)
+     :type (-> (.getAttributeType element)
+               (str/lower-case)
+               (keyword))})
+  KeySchema
+  (as-map [schema]
+    (merge
+     (if-let [e (.getHashKeyElement schema)]  {:hash-key  (as-map e)} {})
+     (if-let [e (.getRangeKeyElement schema)] {:range-key (as-map e)} {})))
   ProvisionedThroughputDescription
   (as-map [throughput]
     {:read  (.getReadCapacityUnits throughput)
@@ -80,6 +91,7 @@
       {:name          (.getTableName table)
        :creation-date (.getCreationDateTime table)
        :item-count    (.getItemCount table)
+       :key-schema    (as-map (.getKeySchema table))
        :throughput    (as-map (.getProvisionedThroughput table))
        :status        (-> (.getTableStatus table)
                           (str/lower-case)
