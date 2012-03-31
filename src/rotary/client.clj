@@ -18,6 +18,7 @@
             KeySchema
             KeySchemaElement
             ProvisionedThroughput
+            ProvisionedThroughputDescription
             PutItemRequest
             ScanRequest]))
 
@@ -67,12 +68,19 @@
       (provisioned-throughput throughput)))))
 
 (extend-protocol AsMap
+  ProvisionedThroughputDescription
+  (as-map [throughput]
+    {:read  (.getReadCapacityUnits throughput)
+     :write (.getWriteCapacityUnits throughput)
+     :last-decrease (.getLastDecreaseDateTime throughput)
+     :last-increase (.getLastIncreaseDateTime throughput)})
   DescribeTableResult
   (as-map [result]
     (let [table (.getTable result)]
       {:name          (.getTableName table)
        :creation-date (.getCreationDateTime table)
        :item-count    (.getItemCount table)
+       :throughput    (as-map (.getProvisionedThroughput table))
        :status        (-> (.getTableStatus table)
                           (str/lower-case)
                           (keyword))})))
