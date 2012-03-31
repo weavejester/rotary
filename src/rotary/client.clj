@@ -8,6 +8,8 @@
             AttributeValue
             CreateTableRequest
             UpdateTableRequest
+            DescribeTableRequest
+            DescribeTableResult
             DeleteTableRequest
             DeleteItemRequest
             GetItemRequest
@@ -63,6 +65,26 @@
      (.setTableName (str name))
      (.setProvisionedThroughput
       (provisioned-throughput throughput)))))
+
+(extend-protocol AsMap
+  DescribeTableResult
+  (as-map [result]
+    (let [table (.getTable result)]
+      {:name          (.getTableName table)
+       :creation-date (.getCreationDateTime table)
+       :item-count    (.getItemCount table)
+       :status        (-> (.getTableStatus table)
+                          (str/lower-case)
+                          (keyword))})))
+
+(defn describe-table
+  "Describe an existing table in DynamoDB with the given name."
+  [cred name]
+  (as-map
+   (.describeTable
+    (db-client cred)
+    (doto (DescribeTableRequest.)
+      (.setTableName name)))))
 
 (defn delete-table
   "Delete a table in DynamoDB with the given name."
