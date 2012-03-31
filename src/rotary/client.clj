@@ -7,6 +7,7 @@
            [com.amazonaws.services.dynamodb.model
             AttributeValue
             CreateTableRequest
+            UpdateTableRequest
             DeleteTableRequest
             DeleteItemRequest
             GetItemRequest
@@ -38,7 +39,7 @@
     (.setWriteCapacityUnits (long write-units))))
 
 (defn create-table
-  "Create a table in DynamoDB with the given name and hash-key."
+  "Create a table in DynamoDB with the given name and properties."
   [cred name & {:keys [hash-key throughput]}]
   (.createTable
    (db-client cred)
@@ -46,6 +47,16 @@
      (.setTableName (str name))
      (.setKeySchema
       (KeySchema. (key-schema-element hash-key)))
+     (.setProvisionedThroughput
+      (provisioned-throughput throughput)))))
+
+(defn update-table
+  "Update a table in DynamoDB with the given name."
+  [cred name & {:keys [throughput]}]
+  (.updateTable
+   (db-client cred)
+   (doto (UpdateTableRequest.)
+     (.setTableName (str name))
      (.setProvisionedThroughput
       (provisioned-throughput throughput)))))
 
