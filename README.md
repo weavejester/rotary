@@ -1,13 +1,21 @@
-# rotary
+# Rotary
 
-FIXME: write description
+A Clojure client for Amazon's [DynamoDB][1] database.
 
-## Usage
+[1]: http://aws.amazon.com/dynamodb/
 
-FIXME: write
+## Installation
+
+Add the following dependency to your Clojure project:
+
+    [rotary "0.1.0"]
+
+## Documentation
+
+* [API Docs](http://weavejester.github.com/rotary)
 
 ## License
 
-Copyright (C) 2012 FIXME
+Copyright (C) 2012 James Reeves
 
 Distributed under the Eclipse Public License, the same as Clojure.
