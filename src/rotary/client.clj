@@ -20,6 +20,7 @@
             ProvisionedThroughput
             ProvisionedThroughputDescription
             PutItemRequest
+            ResourceNotFoundException
             ScanRequest]))
 
 (defn- db-client
@@ -98,13 +99,17 @@
                           (keyword))})))
 
 (defn describe-table
-  "Describe an existing table in DynamoDB with the given name."
+  "Returns a map describing the table in DynamoDB with the given name, or nil
+  if the table does not exist."
   [cred name]
-  (as-map
-   (.describeTable
-    (db-client cred)
-    (doto (DescribeTableRequest.)
-      (.setTableName name)))))
+  (try
+    (as-map
+     (.describeTable
+      (db-client cred)
+      (doto (DescribeTableRequest.)
+        (.setTableName name))))
+    (catch ResourceNotFoundException _
+      nil)))
 
 (defn delete-table
   "Delete a table in DynamoDB with the given name."
