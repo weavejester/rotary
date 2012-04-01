@@ -47,8 +47,8 @@
     (.setWriteCapacityUnits (long write-units))))
 
 (defn create-table
-  "Create a table in DynamoDB with the given name and properties."
-  [cred name & {:keys [hash-key throughput]}]
+  "Create a table in DynamoDB with the given map of properties."
+  [cred {:keys [name hash-key throughput]}]
   (.createTable
    (db-client cred)
    (doto (CreateTableRequest.)
@@ -60,7 +60,7 @@
 
 (defn update-table
   "Update a table in DynamoDB with the given name."
-  [cred name & {:keys [throughput]}]
+  [cred {:keys [name throughput]}]
   (.updateTable
    (db-client cred)
    (doto (UpdateTableRequest.)
