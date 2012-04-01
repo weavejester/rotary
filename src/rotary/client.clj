@@ -34,10 +34,10 @@
 
 (defn- key-schema-element
   "Create a KeySchemaElement object."
-  [[key-name type]]
+  [{key-name :name, key-type :type}]
   (doto (KeySchemaElement.)
     (.setAttributeName (str key-name))
-    (.setAttributeType (str/upper-case (name type)))))
+    (.setAttributeType (str/upper-case (name key-type)))))
 
 (defn- provisioned-throughput
   "Created a ProvisionedThroughput object."
