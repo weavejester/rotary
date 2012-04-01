@@ -111,6 +111,15 @@
     (catch ResourceNotFoundException _
       nil)))
 
+(defn ensure-table
+  "Creates the table if it does not already exist, updates the provisioned
+  throughput if it does."
+  [cred {:keys [name hash-key throughput] :as properties}]
+  (if-let [table (describe-table cred name)]
+    (if (not= throughput (-> table :throughput (select-keys [:read :write])))
+      (update-table cred properties))
+    (create-table cred properties)))
+
 (defn delete-table
   "Delete a table in DynamoDB with the given name."
   [cred name]
