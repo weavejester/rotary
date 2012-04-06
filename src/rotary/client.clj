@@ -149,7 +149,7 @@
    (string? value)
    (doto (AttributeValue.) (.setS value))
    (number? value)
-   (doto (AttributeValue.) (.setN value))))
+   (doto (AttributeValue.) (.setN (str value)))))
 
 (defn- get-value
   "Get the value of an AttributeValue object."
