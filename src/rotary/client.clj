@@ -39,6 +39,14 @@
     (.setAttributeName (str key-name))
     (.setAttributeType (str/upper-case (name key-type)))))
 
+(defn- key-schema
+  "Create a KeySchema object."
+  [hash-key & [range-key]]
+  (let [schema (KeySchema. (key-schema-element hash-key))]
+    (when range-key
+      (.setRangeKeyElement schema (key-schema-element range-key)))
+    schema))
+
 (defn- provisioned-throughput
   "Created a ProvisionedThroughput object."
   [{read-units :read, write-units :write}]
@@ -48,13 +56,12 @@
 
 (defn create-table
   "Create a table in DynamoDB with the given map of properties."
-  [cred {:keys [name hash-key throughput]}]
+  [cred {:keys [name hash-key range-key throughput]}]
   (.createTable
    (db-client cred)
    (doto (CreateTableRequest.)
      (.setTableName (str name))
-     (.setKeySchema
-      (KeySchema. (key-schema-element hash-key)))
+     (.setKeySchema (key-schema hash-key range-key))
      (.setProvisionedThroughput
       (provisioned-throughput throughput)))))
 
@@ -114,7 +121,7 @@
 (defn ensure-table
   "Creates the table if it does not already exist, updates the provisioned
   throughput if it does."
-  [cred {:keys [name hash-key throughput] :as properties}]
+  [cred {:keys [name hash-key range-key throughput] :as properties}]
   (if-let [table (describe-table cred name)]
     (if (not= throughput (-> table :throughput (select-keys [:read :write])))
       (update-table cred properties))
