@@ -21,7 +21,8 @@
             ProvisionedThroughputDescription
             PutItemRequest
             ResourceNotFoundException
-            ScanRequest]))
+            ScanRequest
+            QueryRequest]))
 
 (defn- db-client
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
@@ -209,3 +210,12 @@
         (.scan
          (db-client cred)
          (ScanRequest. table)))))
+
+(defn query
+  "Return the items in a DynamoDB table matching the supplied query."
+  [cred table hash-key]
+  (map item-map
+       (.getItems
+        (.query
+         (db-client cred)
+         (QueryRequest. table (to-attr-value hash-key))))))
