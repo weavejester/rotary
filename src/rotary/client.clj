@@ -211,11 +211,21 @@
          (db-client cred)
          (ScanRequest. table)))))
 
+(defn- query-request
+  "Create a QueryRequest object."
+  [table hash-key {:keys [order]}]
+  (let [qr (QueryRequest. table (to-attr-value hash-key))]
+    (when order
+      (.setScanIndexForward qr (not= order :desc)))
+    qr))
+
 (defn query
-  "Return the items in a DynamoDB table matching the supplied query."
-  [cred table hash-key]
+  "Return the items in a DynamoDB table matching the supplied hash key.
+  Takes the following options:
+    :order - may be :asc or :desc (defaults to :asc)"
+  [cred table hash-key & [options]]
   (map item-map
        (.getItems
         (.query
          (db-client cred)
-         (QueryRequest. table (to-attr-value hash-key))))))
+         (query-request table hash-key options)))))
