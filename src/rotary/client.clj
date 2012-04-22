@@ -24,11 +24,14 @@
             ScanRequest
             QueryRequest]))
 
-(defn- db-client
+(defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
   [cred]
   (AmazonDynamoDBClient.
    (BasicAWSCredentials. (:access-key cred) (:secret-key cred))))
+
+(def db-client
+  (memoize db-client*))
 
 (defprotocol AsMap
   (as-map [x]))
