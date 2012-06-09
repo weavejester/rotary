@@ -14,7 +14,7 @@ Add the following dependency to your Clojure project:
 
     (def aws-credential {:access-key "myAccessKey", :secret-key "mySecretKey"})
     (query aws-credential "MyTable" "somePrimaryKey")
-    (query aws-credential "AnotherTable" 22 {:range-key 13392 :operator "GT" :limit 100 :count true})
+    (query aws-credential "AnotherTable" 22 `(> 13392) {:limit 100 :count true})
 
 ## Documentation
 
