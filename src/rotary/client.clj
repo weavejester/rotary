@@ -215,27 +215,33 @@
          (db-client cred)
          (ScanRequest. table)))))
 
+(defn- set-range-condition
+  "Add the range key condition to a QueryRequest object"
+  [query-request operator & [range-key range-end]]
+  (let [attribute-list (map (fn [arg] (to-attr-value arg)) (remove nil? [range-key range-end]))]
+    (.setRangeKeyCondition query-request
+                           (doto (Condition.)
+                             (.withComparisonOperator operator)
+                             (.withAttributeValueList attribute-list)))))
+
+(defn- resolve-operator
+  "Maps Clojure operators to DynamoDB operators"
+  [operator]
+  (let [operator-map {`> "GT" `>= "GE" `< "LT" `<= "LE" `= "EQ"}
+        resolved-operator (get operator-map operator)]
+    (or resolved-operator operator)))
+
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key {:keys [range-key operator range-end order limit count consistent]}]
-  (let [qr (QueryRequest. table (to-attr-value hash-key))]
-    (cond
-     ; Handle BETWEEN separately since it takes two arguments
-     (and (= operator "BETWEEN") range-key range-end)
-     (.setRangeKeyCondition qr
-                            (doto (Condition.)
-                              (.withComparisonOperator operator)
-                              (.withAttributeValueList [(to-attr-value range-key) (to-attr-value range-end)])))
-     ; Handle EQ, LE, LT, GE, GT, and BEGINS_WITH
-     (and operator range-key)
-     (.setRangeKeyCondition qr
-                            (doto (Condition.)
-                              (.withComparisonOperator operator)
-                              (.withAttributeValueList [(to-attr-value range-key)]))))
+  [table hash-key range-clause {:keys [order limit count consistent]}]
+  (let [qr (QueryRequest. table (to-attr-value hash-key))
+        [operator range-key range-end] range-clause]
+    (when operator
+      (set-range-condition qr (resolve-operator operator) range-key range-end))
     (when order
       (.setScanIndexForward qr (not= order :desc)))
     (when limit
-      (.setLimit qr limit))
+      (.setLimit qr (int limit)))
     (when count
       (.setCount qr count))
     (when consistent
@@ -244,17 +250,15 @@
 
 (defn query
   "Return the items in a DynamoDB table matching the supplied hash key.
+  Can specify a range clause if the table has a range-key ie. `(>= 234)
   Takes the following options:
     :order - may be :asc or :desc (defaults to :asc)
     :limit - should be a positive integer
     :count - return a count if logical true
-    :consistent - return a consistent read if logical true
-    :operator - can be EQ, LE, LT, GE, GT, BEGINS_WITH, or BETWEEN
-    :range-key - required if using :operator. specifies what value to compare to
-    :range-end - required if using :operator BETWEEN. specifies the end value of the query"
-  [cred table hash-key & [options]]
+    :consistent - return a consistent read if logical true"
+  [cred table hash-key & [range-clause options]]
   (map item-map
        (.getItems
         (.query
          (db-client cred)
-         (query-request table hash-key options)))))
+         (query-request table hash-key range-clause options)))))
