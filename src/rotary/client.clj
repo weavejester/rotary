@@ -6,6 +6,7 @@
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
+            Condition
             CreateTableRequest
             UpdateTableRequest
             DescribeTableRequest
@@ -216,16 +217,41 @@
 
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key {:keys [order]}]
+  [table hash-key {:keys [range-key operator range-end order limit count consistent]}]
   (let [qr (QueryRequest. table (to-attr-value hash-key))]
+    (cond
+     ; Handle BETWEEN separately since it takes two arguments
+     (and (= operator "BETWEEN") range-key range-end)
+     (.setRangeKeyCondition qr
+                            (doto (Condition.)
+                              (.withComparisonOperator operator)
+                              (.withAttributeValueList [(to-attr-value range-key) (to-attr-value range-end)])))
+     ; Handle EQ, LE, LT, GE, GT, and BEGINS_WITH
+     (and operator range-key)
+     (.setRangeKeyCondition qr
+                            (doto (Condition.)
+                              (.withComparisonOperator operator)
+                              (.withAttributeValueList [(to-attr-value range-key)]))))
     (when order
       (.setScanIndexForward qr (not= order :desc)))
+    (when limit
+      (.setLimit qr limit))
+    (when count
+      (.setCount qr count))
+    (when consistent
+      (.setConsistentRead qr consistent))
     qr))
 
 (defn query
   "Return the items in a DynamoDB table matching the supplied hash key.
   Takes the following options:
-    :order - may be :asc or :desc (defaults to :asc)"
+    :order - may be :asc or :desc (defaults to :asc)
+    :limit - should be a positive integer
+    :count - return a count if logical true
+    :consistent - return a consistent read if logical true
+    :operator - can be EQ, LE, LT, GE, GT, BEGINS_WITH, or BETWEEN
+    :range-key - required if using :operator. specifies what value to compare to
+    :range-end - required if using :operator BETWEEN. specifies the end value of the query"
   [cred table hash-key & [options]]
   (map item-map
        (.getItems
