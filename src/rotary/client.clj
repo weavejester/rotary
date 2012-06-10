@@ -224,12 +224,11 @@
                              (.withComparisonOperator operator)
                              (.withAttributeValueList attribute-list)))))
 
-(defn- resolve-operator
+(defn- normalize-operator [operator]
   "Maps Clojure operators to DynamoDB operators"
-  [operator]
-  (let [operator-map {`> "GT" `>= "GE" `< "LT" `<= "LE" `= "EQ"}
-        resolved-operator (get operator-map operator)]
-    (or resolved-operator operator)))
+  (let [operator-map {:> "GT" :>= "GE" :< "LT" :<= "LE" := "EQ"}
+        op (->> operator name str/upper-case)]
+    (operator-map (keyword op) op)))
 
 (defn- query-request
   "Create a QueryRequest object."
@@ -237,7 +236,7 @@
   (let [qr (QueryRequest. table (to-attr-value hash-key))
         [operator range-key range-end] range-clause]
     (when operator
-      (set-range-condition qr (resolve-operator operator) range-key range-end))
+      (set-range-condition qr (normalize-operator operator) range-key range-end))
     (when order
       (.setScanIndexForward qr (not= order :desc)))
     (when limit
