@@ -6,6 +6,7 @@
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
+            Condition
             CreateTableRequest
             UpdateTableRequest
             DescribeTableRequest
@@ -214,21 +215,49 @@
          (db-client cred)
          (ScanRequest. table)))))
 
+(defn- set-range-condition
+  "Add the range key condition to a QueryRequest object"
+  [query-request operator & [range-key range-end]]
+  (let [attribute-list (map (fn [arg] (to-attr-value arg)) (remove nil? [range-key range-end]))]
+    (.setRangeKeyCondition query-request
+                           (doto (Condition.)
+                             (.withComparisonOperator operator)
+                             (.withAttributeValueList attribute-list)))))
+
+(defn- normalize-operator [operator]
+  "Maps Clojure operators to DynamoDB operators"
+  (let [operator-map {:> "GT" :>= "GE" :< "LT" :<= "LE" := "EQ"}
+        op (->> operator name str/upper-case)]
+    (operator-map (keyword op) op)))
+
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key {:keys [order]}]
-  (let [qr (QueryRequest. table (to-attr-value hash-key))]
+  [table hash-key range-clause {:keys [order limit count consistent]}]
+  (let [qr (QueryRequest. table (to-attr-value hash-key))
+        [operator range-key range-end] range-clause]
+    (when operator
+      (set-range-condition qr (normalize-operator operator) range-key range-end))
     (when order
       (.setScanIndexForward qr (not= order :desc)))
+    (when limit
+      (.setLimit qr (int limit)))
+    (when count
+      (.setCount qr count))
+    (when consistent
+      (.setConsistentRead qr consistent))
     qr))
 
 (defn query
   "Return the items in a DynamoDB table matching the supplied hash key.
+  Can specify a range clause if the table has a range-key ie. `(>= 234)
   Takes the following options:
-    :order - may be :asc or :desc (defaults to :asc)"
-  [cred table hash-key & [options]]
+    :order - may be :asc or :desc (defaults to :asc)
+    :limit - should be a positive integer
+    :count - return a count if logical true
+    :consistent - return a consistent read if logical true"
+  [cred table hash-key & [range-clause options]]
   (map item-map
        (.getItems
         (.query
          (db-client cred)
-         (query-request table hash-key options)))))
+         (query-request table hash-key range-clause options)))))
