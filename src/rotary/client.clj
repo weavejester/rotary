@@ -59,6 +59,11 @@
     (.setReadCapacityUnits (long read-units))
     (.setWriteCapacityUnits (long write-units))))
 
+(defn set-endpoint [cred endpoint]
+  (.setEndpoint
+    (db-client cred)
+		endpoint))
+
 (defn create-table
   "Create a table in DynamoDB with the given map of properties."
   [cred {:keys [name hash-key range-key throughput]}]
