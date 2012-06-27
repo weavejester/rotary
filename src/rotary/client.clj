@@ -28,8 +28,11 @@
 (defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
   [cred]
-  (AmazonDynamoDBClient.
-   (BasicAWSCredentials. (:access-key cred) (:secret-key cred))))
+  (let [aws-creds (BasicAWSCredentials. (:access-key cred) (:secret-key cred))
+        client (AmazonDynamoDBClient. aws-creds)]
+  (when-let [endpoint (:endpoint cred)]
+    (.setEndpoint client endpoint)
+  client)))
 
 (def db-client
   (memoize db-client*))
