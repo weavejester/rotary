@@ -150,14 +150,17 @@
       .getTableNames
       seq))
 
+(defn- set-of [f s]
+  (and (set? s) (every? f s)))
+
 (defn- to-attr-value
   "Convert a value into an AttributeValue object."
   [value]
   (cond
-   (string? value)
-   (doto (AttributeValue.) (.setS value))
-   (number? value)
-   (doto (AttributeValue.) (.setN (str value)))))
+   (string? value)        (doto (AttributeValue.) (.setS value))
+   (number? value)        (doto (AttributeValue.) (.setN (str value)))
+   (set-of string? value) (doto (AttributeValue.) (.setSS value))
+   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))))
 
 (defn- get-value
   "Get the value of an AttributeValue object."
