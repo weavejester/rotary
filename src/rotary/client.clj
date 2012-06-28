@@ -160,7 +160,9 @@
    (string? value)        (doto (AttributeValue.) (.setS value))
    (number? value)        (doto (AttributeValue.) (.setN (str value)))
    (set-of string? value) (doto (AttributeValue.) (.setSS value))
-   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))))
+   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))
+   (set? value)    (throw (Exception. "Set must be all numbers or all strings"))
+   :else           (throw (Exception. (str "Unknown value type: " (type value))))))
 
 (defn- get-value
   "Get the value of an AttributeValue object."
