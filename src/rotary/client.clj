@@ -167,10 +167,11 @@
 (defn- get-value
   "Get the value of an AttributeValue object."
   [attr-value]
-  (or (.getS attr-value)
-      (.getN attr-value)
-      (.getNS attr-value)
-      (.getSS attr-value)))
+  (cond
+    (.getS attr-value)  (.getS attr-value)
+    (.getN attr-value)  (read-string (.getN attr-value))
+    (.getNS attr-value) (apply hash-set (map read-string (.getNS attr-value)))
+    (.getSS attr-value) (apply hash-set (.getSS attr-value))))
 
 (defn- item-map
   "Turn a item in DynamoDB into a Clojure map."
