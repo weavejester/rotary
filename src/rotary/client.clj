@@ -13,6 +13,7 @@
             DescribeTableResult
             DeleteTableRequest
             DeleteItemRequest
+            ExpectedAttributeValue
             GetItemRequest
             GetItemResult
             Key
@@ -30,9 +31,9 @@
   [cred]
   (let [aws-creds (BasicAWSCredentials. (:access-key cred) (:secret-key cred))
         client (AmazonDynamoDBClient. aws-creds)]
-  (when-let [endpoint (:endpoint cred)]
-    (.setEndpoint client endpoint)
-  client)))
+    (when-let [endpoint (:endpoint cred)]
+      (.setEndpoint client endpoint))
+    client))
 
 (def db-client
   (memoize db-client*))
@@ -150,22 +151,28 @@
       .getTableNames
       seq))
 
+(defn- set-of [f s]
+  (and (set? s) (every? f s)))
+
 (defn- to-attr-value
   "Convert a value into an AttributeValue object."
   [value]
   (cond
-   (string? value)
-   (doto (AttributeValue.) (.setS value))
-   (number? value)
-   (doto (AttributeValue.) (.setN (str value)))))
+   (string? value)        (doto (AttributeValue.) (.setS value))
+   (number? value)        (doto (AttributeValue.) (.setN (str value)))
+   (set-of string? value) (doto (AttributeValue.) (.setSS value))
+   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))
+   (set? value)    (throw (Exception. "Set must be all numbers or all strings"))
+   :else           (throw (Exception. (str "Unknown value type: " (type value))))))
 
 (defn- get-value
   "Get the value of an AttributeValue object."
   [attr-value]
-  (or (.getS attr-value)
-      (.getN attr-value)
-      (.getNS attr-value)
-      (.getSS attr-value)))
+  (cond
+    (.getS attr-value)  (.getS attr-value)
+    (.getN attr-value)  (read-string (.getN attr-value))
+    (.getNS attr-value) (apply hash-set (map read-string (.getNS attr-value)))
+    (.getSS attr-value) (apply hash-set (.getSS attr-value))))
 
 (defn- item-map
   "Turn a item in DynamoDB into a Clojure map."
@@ -178,14 +185,22 @@
   (as-map [result]
     (item-map (.getItem result))))
 
+(defn- expected-value [req expected]
+  (when expected
+    (.setExpected req (fmap #(if (instance? Boolean %)
+                               (ExpectedAttributeValue. %)
+                               (ExpectedAttributeValue. (to-attr-value %)))
+                            expected))))
+
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
-  [cred table item]
+  [cred table item & {:keys [expected]}]
   (.putItem
    (db-client cred)
    (doto (PutItemRequest.)
      (.setTableName table)
-     (.setItem (fmap to-attr-value item)))))
+     (.setItem (fmap to-attr-value item))
+     (expected-value expected))))
 
 (defn- item-key
   "Create a Key object from a value."
