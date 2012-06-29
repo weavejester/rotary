@@ -13,6 +13,7 @@
             DescribeTableResult
             DeleteTableRequest
             DeleteItemRequest
+            ExpectedAttributeValue
             GetItemRequest
             GetItemResult
             Key
@@ -184,14 +185,22 @@
   (as-map [result]
     (item-map (.getItem result))))
 
+(defn- expected-value [req expected]
+  (when expected
+    (.setExpected req (fmap #(if (instance? Boolean %)
+                               (ExpectedAttributeValue. %)
+                               (ExpectedAttributeValue. (to-attr-value %)))
+                            expected))))
+
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
-  [cred table item]
+  [cred table item & {:keys [expected]}]
   (.putItem
    (db-client cred)
    (doto (PutItemRequest.)
      (.setTableName table)
-     (.setItem (fmap to-attr-value item)))))
+     (.setItem (fmap to-attr-value item))
+     (expected-value expected))))
 
 (defn- item-key
   "Create a Key object from a value."
