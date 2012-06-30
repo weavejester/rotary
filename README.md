@@ -8,7 +8,7 @@ A Clojure client for Amazon's [DynamoDB][1] database.
 
 Add the following dependency to your Clojure project:
 
-    [rotary "0.2.4"]
+    [rotary "0.2.5"]
 
 ## Simple Example
 
