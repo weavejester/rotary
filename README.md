@@ -13,8 +13,10 @@ Add the following dependency to your Clojure project:
 ## Simple Example
 
     (def aws-credential {:access-key "myAccessKey", :secret-key "mySecretKey"})
-    (query aws-credential "MyTable" "somePrimaryKey")
-    (query aws-credential "AnotherTable" 22 `(> 13392) {:limit 100 :count true})
+    (get-item aws-credential "MyTable" "somePrimaryKey")
+    (query aws-credential "AnotherTable" 22 `(> 13392) :limit 100 :count true)
+    (update-item aws-credential "MyFavoriteTable" [36 263] {"awesomeness" [:add 20] "updated" [:put 1339529420]})
+    (put-item aws-credential "RandomTable" {"myHashKey" 777 "theRangeKey" 3843 "someOtherAttribute" 33} :return-values "ALL_OLD")
 
 ## Documentation
 
