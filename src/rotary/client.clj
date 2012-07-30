@@ -209,14 +209,28 @@
    (db-client cred)
    (DeleteItemRequest. table (item-key hash-key))))
 
+(defn- scan-filter
+  "Create a single scan filter"
+  [acc [column operator value]]
+  (merge acc
+    {(name column) (doto (Condition.)
+                         (.withComparisonOperator (normalize-operator operator))
+                         (.withAttributeValueList [(to-attr-value value)]))}))
+
+(defn- scan-request
+  "Create a scan request with optional filters"
+  [table options]
+  (doto (ScanRequest. table)
+    (.withScanFilter (reduce scan-filter {} (or options [])))))
+
 (defn scan
-  "Return the items in a DynamoDB table."
-  [cred table]
+  "Return the items in a DynamoDB table, optionally filtered"
+  [cred table & [options]]
   (map item-map
        (.getItems
         (.scan
          (db-client cred)
-         (ScanRequest. table)))))
+         (scan-request table options)))))
 
 (defn- set-range-condition
   "Add the range key condition to a QueryRequest object"
