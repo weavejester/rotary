@@ -26,7 +26,7 @@
   (let [tname (:name tablespec)]
     (let [new-tab (create-table cred tablespec)]
       (timeout
-       :timeout-ms 45000
+       :timeout-ms 60000
        :timeout-val nil
        :poll-bindings [table-on-aws (describe-table cred tname)]
        :done? (= :active (:status table-on-aws))
@@ -48,7 +48,7 @@
          :hash-key {:name "id" :type :n}
          :range-key {:name "name" :type :s}
          :throughput {:read 1 :write 1}})
-      (println "Created tables, waiting for them to be active (max 45s before failing)")))
+      (println "Created tables, waiting for them to be active (max 60s before failing)")))
     (after :contents
            (do
              (delete-table cred tname_hash)
