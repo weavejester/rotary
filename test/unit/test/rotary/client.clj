@@ -53,9 +53,9 @@
   )
 
 (future-fact "only S and N are valid element types"
-  (key-schema-element {:name "ksname" :type :x}) =throws=> Exception
-  (key-schema-element {:name "ksname" :type :number}) =throws=> Exception
-  (key-schema-element {:name "ksname" :type :string}) =throws=> Exception)
+  (key-schema-element {:name "ksname" :type :x}) => (throws Exception)
+  (key-schema-element {:name "ksname" :type :number}) => (throws Exception)
+  (key-schema-element {:name "ksname" :type :string}) => (throws Exception))
 
 ;; key-schema
 (facts "We can create well-formed KeySchema's"
@@ -242,7 +242,54 @@
 ;;TODO tests that should break things, but don't (:limit 0, etc)
 ;;TODO between, not=, in ?
 
+(tabular
+ (fact "as-map and key-schema-element are inverses for KeySchemaElement's"
+       (as-map (key-schema-element ?map)) => ?map)
+ ?map
+ {:name "name" :type :s}
+ {:name "name" :type :n}
+
+ {:name "" :type :s}  ;;TODO uh-oh.
+ {:name "a" :type :s}
+ {:name "A" :type :s}
+ )
+
+(fact "as-map can't handle empty KeySchemaElement's"
+      (as-map (KeySchemaElement.)) => (throws java.lang.NullPointerException))
+
+
+(tabular
+ (facts "as-map and key-schema are approximate inverses for KeySchema's"
+        (as-map (key-schema ?hk-map)) => {:hash-key ?hk-map})
+ ?hk-map
+ {:name "name" :type :s}
+ {:name "name" :type :n}
+
+ {:name "" :type :s}  ;;TODO uh-oh.
+ {:name "a" :type :s}
+ {:name "A" :type :s}
+ )
+
+(tabular
+ (facts "as-map and key-schema are approximate inverses for KeySchema's"
+        (as-map (key-schema ?hk-map ?rk-map))
+        => {:hash-key ?hk-map :range-key ?rk-map})
+ ?hk-map ?rk-map
+ {:name "hk" :type :s}
+ {:name "hk" :type :n}
+
+ {:name "" :type :s} {:name "" :type :s} ;;TODO uh-oh.
+
+ {:name "hk" :type :n} {:name "rk" :type :n}
+ {:name "hk" :type :n} {:name "rk" :type :s}
+ {:name "hk" :type :s} {:name "rk" :type :n}
+ {:name "hk" :type :s} {:name "rk" :type :s}
+ )
+
 ;;; TODO test as-map for:
-;; KeySchemaElement KeySchema ProvisionedThroughputDescription
+;; ProvisionedThroughputDescription
 ;; DescribeTableResult GetItemResult
+
+(fact "as-map isn't the identity on maps"
+      (as-map {}) => (throws java.lang.IllegalArgumentException))
 
