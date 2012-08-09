@@ -144,24 +144,103 @@
  )
 ;;TODO hash+range key?
 
-;;TODO set-range-condition
+;; ;;set-range-condition
+;; ;;TODO should we test this?  All the conversion logic is in query-request.
 ;; (against-background
 ;;  [(around :facts
 ;;     (let [qreq (QueryRequest. "tablename" (to-attr-value "hashkey"))]
 ;;       ?form))]
 ;;  (tabular
 ;;   (fact "we can set a range condition on a query request"
-;;     (apply set-range-condition qreq ?range)
-;;     => FOO)
-;;    ?range
-;;    [`< 3])
+;;         (let [qreq (apply set-range-condition qreq ?range)
+;;               rkc (.getRangeKeyCondition qreq)
+;;               cop (.getComparisonOperator rkc)
+;;               avlist (.getAttributeValueList rkc)
+;;               vlist (map get-value avlist)]
+;;           [qreq
+;;            rkc
+;;            cop
+;;            vlist])
+;;         => (just [#(instance? QueryRequest %)
+;;                   #(instance? Condition %)
+;;                   ?cop
+;;                   ?vlist]))
+;;    ?range ?cop ?vlist
+;;    [`< 42] "LT" ["42"]
+;;    ['any-ns/< 42] "LT" ["42"]
+;;    [`> 42] "GT" ["42"]
+;;    [`<= 42] "LE" ["42"]
+;;    [`>= 42] "GE" ["42"]
+;;    [`= 42] "EQ" ["42"]
+
+;;    [`< 42 99] "LT" ["42" "99"]
+;;    [`< "aardvark" "zebra"] "LT" ["aardvark" "zebra"]
+;;    )
 ;;  )
 
-;;; TODO test:
-;; query-request
 ;; normalize-operator
-;; (map normalize-operator '[ns/< < > <= >= =])
-;; ;=> ("LT" "LT" "GT" "LE" "GE" "EQ")
+(fact "we can convert comparison operators to strings DynamoDB understands"
+  (map normalize-operator '[ns/< < > <= >= =]) 
+  => [ "LT" "LT" "GT" "LE" "GE" "EQ"])
+
+(fact "the ns doesn't matter when normalizing operators"
+      (map normalize-operator ['< `< 'any-ns/< 'at-all/<])
+      => ["LT" "LT" "LT" "LT"])
+
+;; query-request
+(tabular
+ (fact "we can create a QueryRequest, and it has the fields we expect"
+       (let [qreq (query-request ?table ?hash-key ?range-clause ?kwargs)
+             [count? hkval limit
+              rkcond scan-forward?
+              tname is-count? is-scan-forward?]
+                (map #(% qreq)
+                     (eval (vec (map (fn [m] `(memfn ~m))
+                                  '[getCount getHashKeyValue getLimit
+                                    getRangeKeyCondition getScanIndexForward
+                                    getTableName isCount isScanIndexForward]))))]
+         [tname (get-value hkval) 
+          (.getComparisonOperator rkcond)
+          (map get-value (.getAttributeValueList rkcond))
+          limit count? is-count? scan-forward? is-scan-forward?])
+       => (just ?retval))
+
+ ?table ?hash-key ?range-clause ?kwargs, ?retval
+
+ "AnotherTable" 22 `(> 13392) {},
+ ["AnotherTable" "22" "GT" ["13392"] nil? nil? nil? nil? nil?]
+
+ "AnotherTable" 22 `(> 13392) {:limit 100},
+ ["AnotherTable" "22" "GT" ["13392"] 100 falsey falsey falsey falsey]
+
+ "AnotherTable" 22 `(> 13392) {:count true},
+ ["AnotherTable" "22" "GT" ["13392"] falsey TRUTHY TRUTHY falsey falsey]
+
+ "AnotherTable" 22 `(> 13392) {:count false},
+ ["AnotherTable" "22" "GT" ["13392"] falsey falsey falsey falsey falsey]
+
+ "AnotherTable" 22 `(> 13392) {:order :asc},
+ ["AnotherTable" "22" "GT" ["13392"] falsey falsey falsey TRUTHY TRUTHY]
+
+ "AnotherTable" 22 `(> 13392) {:order :desc},
+ ["AnotherTable" "22" "GT" ["13392"] falsey falsey falsey falsey falsey]
+
+ ;; different range clauses
+ "AnotherTable" 22 `(< 13392) {},
+ ["AnotherTable" "22" "LT" ["13392"] nil? nil? nil? nil? nil?]
+
+ "AnotherTable" 22 `(<= 13392) {},
+ ["AnotherTable" "22" "LE" ["13392"] nil? nil? nil? nil? nil?]
+
+ "AnotherTable" 22 `(>= 13392) {},
+ ["AnotherTable" "22" "GE" ["13392"] nil? nil? nil? nil? nil?]
+
+ "AnotherTable" 22 `(= 13392) {},
+ ["AnotherTable" "22" "EQ" ["13392"] nil? nil? nil? nil? nil?]
+ )
+;;TODO add test for :consistent arg
+;;TODO tests that should break things, but don't (:limit 0, etc)
+;;TODO between, not=, in ?
 
 ;;; TODO test as-map for:
 ;; KeySchemaElement KeySchema ProvisionedThroughputDescription
