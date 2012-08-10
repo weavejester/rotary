@@ -102,6 +102,13 @@
  -1 -1M -1.0M -1.00M -1.0 -1.00 -1.23 -1.234
  )
 ;; TODO to-attr-value for "sets" of strings, numbers?
+;; TODO the above works, but the round-trip to DynamoDB doesn't:
+;; 1.0 -> dydb -> "1"
+;; a further complication is that these ALL work:
+;; (get-item cred table 1)
+;; (get-item cred table 1.0)
+;; (get-item cred table 1.00)
+;; (get-item cred table 1.0M)
 
 ;; get-value
 (tabular
