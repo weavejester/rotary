@@ -20,6 +20,21 @@ Add the following dependency to your Clojure project:
 
 * [API Docs](http://weavejester.github.com/rotary)
 
+## Testing
+
+To run the unit tests: 
+
+	$ lein midje 'unit.*'
+
+To run the integration tests, set the environment variables 
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to your AWS credentials, 
+then run
+
+	$ lein midje 'integration.*'
+
+This will take a bit of time, since the tests have to create tables and wait
+for Amazon to activate them.
+
 ## License
 
 Copyright (C) 2012 James Reeves
