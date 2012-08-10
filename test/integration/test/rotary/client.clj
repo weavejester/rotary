@@ -2,7 +2,16 @@
   (:use [rotary.client])
   (:use [midje.sweet])
   (:import [com.amazonaws.services.dynamodb.model
-            PutItemResult]))
+            CreateTableResult
+            DeleteItemResult 
+            PutItemResult
+            UpdateTableResult]))
+
+(def WAIT_MS 60000)
+
+;; wait for all tests that update table params :(
+(defmacro with-wait [& body]
+  `(let [res# (do ~@body)] (do (Thread/sleep WAIT_MS) res#)))
 
 (let [access-key (System/getenv "AWS_ACCESS_KEY_ID")
       secret-key (System/getenv "AWS_SECRET_ACCESS_KEY")]
@@ -27,7 +36,7 @@
   (let [tname (:name tablespec)]
     (let [new-tab (create-table cred tablespec)]
       (timeout
-       :timeout-ms 60000
+       :timeout-ms WAIT_MS
        :timeout-val nil
        :poll-bindings [table-on-aws (describe-table cred tname)]
        :done? (= :active (:status table-on-aws))
@@ -61,7 +70,7 @@
              (delete-table cred tname_hash_range_num)
              (println "Finished tests.")))]
  
-
+ ;; create-tables
  (fact "we have indeed created tables with the right params"
    (describe-table cred tname_hash) =>
    (contains {:name tname_hash
@@ -86,7 +95,15 @@
               :status :active})
    )
 
- ;; put-item
+ ;; list-tables
+ (fact "we can list all the tables"
+   (list-tables cred)
+   => (contains [tname_hash
+                 tname_hash_range_str
+                 tname_hash_range_num]
+                :in-any-order :gaps-ok))
+ 
+ ;; put-item, get-item
  (fact "we can put things into a hash table"
    (put-item cred tname_hash {"id" 1, "name" "White Rabbit", "gender" "?"})
    => #(instance? PutItemResult %)
@@ -270,12 +287,60 @@
              ]
             :in-any-order))
 
- ) ; against-background
+ ;; ensure-table
+ ;;NOTE: we can only increase throughput 2x per call
+ ;;NOTE: oh my.  It just took ~10m to update a table.  Let's leave
+ ;;these tests for later.
+ (future-fact "we can update a table's throughput"
+   (with-wait
+     (update-table cred {:name tname_hash :throughput {:read 2 :write 2}}))
+   => #(instance? UpdateTableResult %)
+   (describe-table cred tname_hash) => 
+   (contains {:name tname_hash
+              :key-schema {:hash-key {:name "id", :type :n}}
+              :throughput (contains {:read 2, :write 2})
+              :status :active}))
 
-;;TODO update-table ensure-table list-tables
-;;TODO delete-item
-;;TODO range queries, query :order :limit :count
+ (future-fact "we can ensure that a table already exists"
+   (with-wait
+     (ensure-table cred {:name tname_hash :throughput {:read 3 :write 2}}))
+   => #(instance? UpdateTableResult %)
+   (describe-table cred tname_hash) => 
+   (contains {:name tname_hash
+              :key-schema {:hash-key {:name "id", :type :n}}
+              :throughput (contains {:read 3, :write 2})
+              :status :active}))
 
+ ;;case when ensure-table creates new table
+ ;;TODO this almost works.  I think midje is trying to delete the
+ ;;table twice for some reason.
+ (future-fact "ensure-table can create a new table"
+   (with-wait
+     (ensure-table cred
+                   {:name "dydb_test_ensure_table_new"
+                    :hash-key {:name "id" :type :n}
+                    :throughput {:read 1 :write 1}}))
+   => #(instance? CreateTableResult)
+
+   (describe-table cred tname_hash) =>
+   (contains {:name "dydb_test_ensure_table_new"
+              :key-schema {:hash-key {:name "id", :type :n}}
+              :throughput {:read 1, :write 1, :last-decrease nil, :last-increase nil}
+              :status :active})
+   (against-background
+    (after :facts (delete-table cred "dydb_test_ensure_table_new"))))
+
+;;NOTE this leaves the tname_hash table empty
+ (fact "we can delete an item in a hash table"
+   (get-item cred tname_hash 1) => {"id" "1" , "name" "Alice", "gender" "f"}
+   (delete-item cred tname_hash 1) => #(instance? DeleteItemResult %)
+   (get-item cred tname_hash 1) => nil
+   )
+;;TODO 2-arg delete-item for hash+range tables
+ 
 ;;TODO check if dynamodb really enforces set semantics on attributes,
 ;;or if that's just (misleading) terminology
+
+
+   ) ; against-background (should be at end)
 
