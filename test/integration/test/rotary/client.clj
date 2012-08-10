@@ -7,7 +7,7 @@
             PutItemResult
             UpdateTableResult]))
 
-(def WAIT_MS 60000)
+(def WAIT_MS 90000)
 
 ;; wait for all tests that update table params :(
 (defmacro with-wait [& body]
@@ -62,7 +62,7 @@
          :hash-key {:name "id" :type :n}
          :range-key {:name "num" :type :n}
          :throughput {:read 1 :write 1}})
-      (println "Created tables, waiting for them to be active (max 60s before failing)")))
+      (println "Created tables, waiting for them to be active (max 90s before failing)")))
     (after :contents
            (do
              (delete-table cred tname_hash)
