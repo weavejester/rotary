@@ -185,7 +185,10 @@
    (db-client cred)
    (doto (PutItemRequest.)
      (.setTableName table)
-     (.setItem (fmap to-attr-value item)))))
+     (.setItem
+      (into {}
+            (for [[k v] item]
+              [(name k) (to-attr-value v)]))))))
 
 (defn- item-key
   "Create a Key object from a value."
