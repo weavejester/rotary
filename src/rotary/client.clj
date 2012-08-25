@@ -1,6 +1,7 @@
 (ns rotary.client
   "Amazon DynamoDB client functions."
-  (:use [clojure.algo.generic.functor :only (fmap)])
+  (:use [clojure.algo.generic.functor :only (fmap)]
+        [clojure.core.incubator :only (-?>>)])
   (:require [clojure.string :as str])
   (:import com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
@@ -159,14 +160,15 @@
    (number? value)
    (doto (AttributeValue.) (.setN (str value)))))
 
+(defn- to-long [x] (Long. x))
+
 (defn- get-value
   "Get the value of an AttributeValue object."
   [attr-value]
-  (cond
-    (.getS attr-value)  (.getS attr-value)
-    (.getN attr-value)  (read-string (.getN attr-value))
-    (.getNS attr-value) (apply hash-set (map read-string (.getNS attr-value)))
-    (.getSS attr-value) (apply hash-set (.getSS attr-value))))
+  (or (.getS attr-value)
+      (-?>> (.getN attr-value)  to-long)
+      (-?>> (.getNS attr-value) (map to-long) (into #{}))
+      (-?>> (.getSS attr-value) (into #{}))))
 
 (defn- item-map
   "Turn a item in DynamoDB into a Clojure map."
