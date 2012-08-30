@@ -151,14 +151,19 @@
       .getTableNames
       seq))
 
+(defn- set-of [f s]
+  (and (set? s) (every? f s)))
+
 (defn- to-attr-value
   "Convert a value into an AttributeValue object."
   [value]
   (cond
-   (string? value)
-   (doto (AttributeValue.) (.setS value))
-   (number? value)
-   (doto (AttributeValue.) (.setN (str value)))))
+   (string? value)        (doto (AttributeValue.) (.setS value))
+   (number? value)        (doto (AttributeValue.) (.setN (str value)))
+   (set-of string? value) (doto (AttributeValue.) (.setSS value))
+   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))
+   (set? value)    (throw (Exception. "Set must be all numbers or all strings"))
+   :else           (throw (Exception. (str "Unknown value type: " (type value))))))
 
 (defn- to-long [x] (Long. x))
 
