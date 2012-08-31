@@ -220,14 +220,24 @@
    (db-client cred)
    (DeleteItemRequest. table (item-key hash-key))))
 
+(defn- scan-request
+  "Create a ScanRequest object."
+  [table {:keys [limit count]}]
+  (let [sr (ScanRequest. table)]
+    (when limit
+      (.setLimit sr (int limit)))
+    (when count
+      (.setCount sr count))
+    sr))
+
 (defn scan
   "Return the items in a DynamoDB table."
-  [cred table]
+  [cred table & [options]]
   (map item-map
        (.getItems
         (.scan
          (db-client cred)
-         (ScanRequest. table)))))
+         (scan-request table options)))))
 
 (defn- set-range-condition
   "Add the range key condition to a QueryRequest object"
