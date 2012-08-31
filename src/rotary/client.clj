@@ -128,12 +128,9 @@
       nil)))
 
 (defn ensure-table
-  "Creates the table if it does not already exist, updates the provisioned
-  throughput if it does."
-  [cred {:keys [name hash-key range-key throughput] :as properties}]
-  (if-let [table (describe-table cred name)]
-    (if (not= throughput (-> table :throughput (select-keys [:read :write])))
-      (update-table cred properties))
+  "Creates the table if it does not already exist."
+  [cred {name :name :as properties}]
+  (if-not (describe-table cred name)
     (create-table cred properties)))
 
 (defn delete-table
