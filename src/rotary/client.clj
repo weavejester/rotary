@@ -232,7 +232,7 @@
 (defn- set-range-condition
   "Add the range key condition to a QueryRequest object"
   [query-request operator & [range-key range-end]]
-  (let [attribute-list (map (fn [arg] (to-attr-value arg)) (remove nil? [range-key range-end]))]
+  (let [attribute-list (->> [range-key range-end] (remove nil?) (map to-attr-value))]
     (.setRangeKeyCondition query-request
                            (doto (Condition.)
                              (.withComparisonOperator operator)
