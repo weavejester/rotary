@@ -236,6 +236,19 @@
    (db-client cred)
    (DeleteItemRequest. table (item-key hash-key))))
 
+(extend-protocol AsMap
+  Key
+  (as-map [k]
+    {:hash-key  (get-value (.getHashKeyElement k))
+     :range-key (get-value (.getRangeKeyElement k))})
+  nil
+  (as-map [_] nil))
+
+(defn- result-map [results]
+  {:items    (map item-map (.getItems results))
+   :count    (.getCount results)
+   :last-key (as-map (.getLastEvaluatedKey results))})
+
 (defn- scan-request
   "Create a ScanRequest object."
   [table {:keys [limit count]}]
@@ -250,11 +263,10 @@
   "Return the items in a DynamoDB table. Takes the following options:
     :limit - the maximum number of items to return"
   [cred table & [options]]
-  (map item-map
-       (.getItems
-        (.scan
-         (db-client cred)
-         (scan-request table options)))))
+  (result-map
+   (.scan
+    (db-client cred)
+    (scan-request table options))))
 
 (defn- set-range-condition
   "Add the range key condition to a QueryRequest object"
@@ -299,8 +311,7 @@
     :limit - the maximum number of items to return
     :consistent - return a consistent read if logical true"
   [cred table hash-key & [range-clause options]]
-  (map item-map
-       (.getItems
-        (.query
-         (db-client cred)
-         (query-request table hash-key range-clause options)))))
+  (result-map
+   (.query
+    (db-client cred)
+    (query-request table hash-key range-clause options))))
