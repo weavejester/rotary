@@ -311,6 +311,11 @@
       (.setExclusiveStartKey qr (item-key after)))
     qr))
 
+(defn- extract-range [[range options]]
+  (if (and (map? range) (nil? options))
+    [nil range]
+    [range options]))
+
 (defn query
   "Return the items in a DynamoDB table matching the supplied hash key.
   Can specify a range clause if the table has a range-key ie. `(>= 234)
@@ -319,8 +324,9 @@
     :attrs - limit the values returned to the following attribute names
     :limit - the maximum number of items to return
     :consistent - return a consistent read if logical true"
-  [cred table hash-key & [range-clause options]]
-  (result-map
-   (.query
-    (db-client cred)
-    (query-request table hash-key range-clause options))))
+  [cred table hash-key & range-and-options]
+  (let [[range options] (extract-range range-and-options)]
+    (result-map
+     (.query
+      (db-client cred)
+      (query-request table hash-key range options)))))
