@@ -64,7 +64,23 @@
     (.setWriteCapacityUnits (long write-units))))
 
 (defn create-table
-  "Create a table in DynamoDB with the given map of properties."
+  "Create a table in DynamoDB with the given map of properties. The properties
+  available are:
+    :name       - the name of the table (required)
+    :hash-key   - a map that defines the hash key name and type (required)
+    :range-key  - a map that defines the range key name and type (optional)
+    :throughput - a map that defines the read and write throughput (required)
+
+  The hash-key and range-key definitions are maps with the following keys:
+    :name - the name of the key
+    :type - the type of the key (:s, :n, :ss, :ns)
+
+  Where :s is a string type, :n is a number type, and :ss and :ns are sets of
+  strings and number respectively.
+
+  The throughput is a map with two keys:
+    :read  - the provisioned number of reads per second
+    :write - the provisioned number of writes per second"
   [cred {:keys [name hash-key range-key throughput]}]
   (.createTable
    (db-client cred)
@@ -75,7 +91,10 @@
       (provisioned-throughput throughput)))))
 
 (defn update-table
-  "Update a table in DynamoDB with the given name."
+  "Update a table in DynamoDB with the given name. Only the throughput may be
+  updated. The throughput values can be increased by no more than a factor of
+  two over the current values (e.g. if your read throughput was 20, you could
+  only set it from 1 to 40). See create-table."
   [cred {:keys [name throughput]}]
   (.updateTable
    (db-client cred)
@@ -228,7 +247,8 @@
     sr))
 
 (defn scan
-  "Return the items in a DynamoDB table."
+  "Return the items in a DynamoDB table. Takes the following options:
+    :limit - the maximum number of items to return"
   [cred table & [options]]
   (map item-map
        (.getItems
@@ -276,8 +296,7 @@
   Takes the following options:
     :order - may be :asc or :desc (defaults to :asc)
     :attrs - limit the values returned to the following attribute names
-    :limit - should be a positive integer
-    :count - return a count if logical true
+    :limit - the maximum number of items to return
     :consistent - return a consistent read if logical true"
   [cred table hash-key & [range-clause options]]
   (map item-map
