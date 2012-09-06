@@ -216,8 +216,13 @@
 
 (defn- item-key
   "Create a Key object from a value."
-  [hash-key]
-  (Key. (to-attr-value hash-key)))
+  [{:keys [hash-key range-key]}]
+  (let [key (Key.)]
+    (when hash-key
+      (.setHashKeyElement key (to-attr-value hash-key)))
+    (when range-key
+      (.setRangeKeyElement key (to-attr-value range-key)))
+    key))
 
 (defn get-item
   "Retrieve an item from a DynamoDB table by its hash key."
@@ -227,14 +232,14 @@
     (db-client cred)
     (doto (GetItemRequest.)
       (.setTableName table)
-      (.setKey (item-key hash-key))))))
+      (.setKey (item-key {:hash-key hash-key}))))))
 
 (defn delete-item
   "Delete an item from a DynamoDB table by its hash key."
   [cred table hash-key]
   (.deleteItem
    (db-client cred)
-   (DeleteItemRequest. table (item-key hash-key))))
+   (DeleteItemRequest. table (item-key {:hash-key hash-key}))))
 
 (extend-protocol AsMap
   Key
@@ -251,12 +256,14 @@
 
 (defn- scan-request
   "Create a ScanRequest object."
-  [table {:keys [limit count]}]
+  [table {:keys [limit count after]}]
   (let [sr (ScanRequest. table)]
     (when limit
       (.setLimit sr (int limit)))
     (when count
       (.setCount sr count))
+    (when after
+      (.setExclusiveStartKey sr (item-key after)))
     sr))
 
 (defn scan
@@ -285,7 +292,7 @@
 
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key range-clause {:keys [order limit count consistent attrs]}]
+  [table hash-key range-clause {:keys [order limit after count consistent attrs]}]
   (let [qr (QueryRequest. table (to-attr-value hash-key))
         [operator range-key range-end] range-clause]
     (when operator
@@ -300,6 +307,8 @@
       (.setCount qr count))
     (when consistent
       (.setConsistentRead qr consistent))
+    (when after
+      (.setExclusiveStartKey qr (item-key after)))
     qr))
 
 (defn query
