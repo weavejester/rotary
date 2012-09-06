@@ -253,11 +253,13 @@
 
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key range-clause {:keys [order limit count consistent]}]
+  [table hash-key range-clause {:keys [order limit count consistent attrs]}]
   (let [qr (QueryRequest. table (to-attr-value hash-key))
         [operator range-key range-end] range-clause]
     (when operator
       (set-range-condition qr (normalize-operator operator) range-key range-end))
+    (when attrs
+      (.setAttributesToGet qr (map name attrs)))
     (when order
       (.setScanIndexForward qr (not= order :desc)))
     (when limit
@@ -273,6 +275,7 @@
   Can specify a range clause if the table has a range-key ie. `(>= 234)
   Takes the following options:
     :order - may be :asc or :desc (defaults to :asc)
+    :attrs - limit the values returned to the following attribute names
     :limit - should be a positive integer
     :count - return a count if logical true
     :consistent - return a consistent read if logical true"
