@@ -269,7 +269,12 @@
 (defn scan
   "Return the items in a DynamoDB table. Takes the following options:
     :limit - the maximum number of items to return
-    :after - only return results after this key"
+    :after - only return results after this key
+
+  The items are returned as a map with the following keys:
+    :items    - the list of items returned
+    :count    - the count of items matching the query
+    :last-key - the last evaluated key (useful for paging) "
   [cred table & [options]]
   (result-map
    (.scan
@@ -325,7 +330,12 @@
     :attrs - limit the values returned to the following attribute names
     :limit - the maximum number of items to return
     :after - only return results after this key
-    :consistent - return a consistent read if logical true"
+    :consistent - return a consistent read if logical true
+
+  The items are returned as a map with the following keys:
+    :items    - the list of items returned
+    :count    - the count of items matching the query
+    :last-key - the last evaluated key (useful for paging)"
   [cred table hash-key & range-and-options]
   (let [[range options] (extract-range range-and-options)]
     (result-map
