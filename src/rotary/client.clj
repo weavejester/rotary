@@ -171,19 +171,22 @@
 (defn- set-of [f s]
   (and (set? s) (every? f s)))
 
-(defn- byte-buf? [v]
-  (instance? ByteBuffer v))
+(def byte-array-class
+  (Class/forName "[B"))
+
+(defn byte-array? [v]
+  (instance? byte-array-class v))
 
 (defn- to-attr-value
   "Convert a value into an AttributeValue object."
   [value]
   (cond
-   (string? value)          (doto (AttributeValue.) (.setS value))
-   (number? value)          (doto (AttributeValue.) (.setN (str value)))
-   (byte-buf? value)        (doto (AttributeValue.) (.setB value))
-   (set-of string? value)   (doto (AttributeValue.) (.setSS value))
-   (set-of number? value)   (doto (AttributeValue.) (.setNS (map str value)))
-   (set-of byte-buf? value) (doto (AttributeValue.) (.setBS value))
+   (string? value)            (doto (AttributeValue.) (.setS value))
+   (number? value)            (doto (AttributeValue.) (.setN (str value)))
+   (byte-array? value)        (doto (AttributeValue.) (.setB (ByteBuffer/wrap value)))
+   (set-of string? value)     (doto (AttributeValue.) (.setSS value))
+   (set-of number? value)     (doto (AttributeValue.) (.setNS (map str value)))
+   (set-of byte-array? value) (doto (AttributeValue.) (.setBS (map #(ByteBuffer/wrap %) value)))
    (set? value)    (throw (Exception. "Set must be all numbers, all strings or all byte buffers"))
    :else           (throw (Exception. (str "Unknown value type: " (type value))))))
 
