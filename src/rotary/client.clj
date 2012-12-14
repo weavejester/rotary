@@ -192,11 +192,16 @@
 
 (defn- to-long [x] (Long. x))
 
+(defn- to-byte [x]
+  (.array x))
+
 (defn- get-value
   "Get the value of an AttributeValue object."
   [attr-value]
   (or (.getS attr-value)
       (-?>> (.getN attr-value)  to-long)
+      (-?>> (.getB attr-value)  to-byte)
+      (-?>> (.getBS attr-value) (map to-byte) (into #{}))
       (-?>> (.getNS attr-value) (map to-long) (into #{}))
       (-?>> (.getSS attr-value) (into #{}))))
 
@@ -210,6 +215,8 @@
   GetItemResult
   (as-map [result]
     (item-map (.getItem result))))
+
+
 
 (defn put-item
   "Add an item (a Clojure map) to a DynamoDB table."
