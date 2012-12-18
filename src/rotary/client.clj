@@ -7,6 +7,7 @@
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
+            AttributeValueUpdate
             Condition
             CreateTableRequest
             UpdateTableRequest
@@ -16,6 +17,8 @@
             DeleteItemRequest
             GetItemRequest
             GetItemResult
+            UpdateItemRequest
+            UpdateItemResult
             Key
             KeySchema
             KeySchemaElement
@@ -24,7 +27,8 @@
             PutItemRequest
             ResourceNotFoundException
             ScanRequest
-            QueryRequest]))
+            QueryRequest]
+           java.nio.ByteBuffer))
 
 (defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
@@ -170,24 +174,37 @@
 (defn- set-of [f s]
   (and (set? s) (every? f s)))
 
+(def byte-array-class
+  (Class/forName "[B"))
+
+(defn byte-array? [v]
+  (instance? byte-array-class v))
+
 (defn- to-attr-value
   "Convert a value into an AttributeValue object."
   [value]
   (cond
-   (string? value)        (doto (AttributeValue.) (.setS value))
-   (number? value)        (doto (AttributeValue.) (.setN (str value)))
-   (set-of string? value) (doto (AttributeValue.) (.setSS value))
-   (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))
-   (set? value)    (throw (Exception. "Set must be all numbers or all strings"))
+   (string? value)            (doto (AttributeValue.) (.setS value))
+   (number? value)            (doto (AttributeValue.) (.setN (str value)))
+   (byte-array? value)        (doto (AttributeValue.) (.setB (ByteBuffer/wrap value)))
+   (set-of string? value)     (doto (AttributeValue.) (.setSS value))
+   (set-of number? value)     (doto (AttributeValue.) (.setNS (map str value)))
+   (set-of byte-array? value) (doto (AttributeValue.) (.setBS (map #(ByteBuffer/wrap %) value)))
+   (set? value)    (throw (Exception. "Set must be all numbers, all strings or all byte buffers"))
    :else           (throw (Exception. (str "Unknown value type: " (type value))))))
 
 (defn- to-long [x] (Long. x))
+
+(defn- to-byte [x]
+  (.array x))
 
 (defn- get-value
   "Get the value of an AttributeValue object."
   [attr-value]
   (or (.getS attr-value)
       (-?>> (.getN attr-value)  to-long)
+      (-?>> (.getB attr-value)  to-byte)
+      (-?>> (.getBS attr-value) (map to-byte) (into #{}))
       (-?>> (.getNS attr-value) (map to-long) (into #{}))
       (-?>> (.getSS attr-value) (into #{}))))
 
@@ -201,18 +218,6 @@
   GetItemResult
   (as-map [result]
     (item-map (.getItem result))))
-
-(defn put-item
-  "Add an item (a Clojure map) to a DynamoDB table."
-  [cred table item]
-  (.putItem
-   (db-client cred)
-   (doto (PutItemRequest.)
-     (.setTableName table)
-     (.setItem
-      (into {}
-            (for [[k v] item]
-              [(name k) (to-attr-value v)]))))))
 
 (defn- item-key
   "Create a Key object from a value."
@@ -233,6 +238,44 @@
     (doto (GetItemRequest.)
       (.setTableName table)
       (.setKey (item-key {:hash-key hash-key}))))))
+
+(defn put-item
+  "Add an item (a Clojure map) to a DynamoDB table."
+  [cred table item]
+  (.putItem
+   (db-client cred)
+   (doto (PutItemRequest.)
+     (.setTableName table)
+     (.setItem
+      (into {}
+            (for [[k v] item]
+              [(name k) (to-attr-value v)]))))))
+
+(defn- to-attribute-update [action attribute]
+  (if (vector? attribute)
+    {(name (first attribute)) (AttributeValueUpdate. (to-attr-value (second attribute)) action)}
+    {(name attribute) (AttributeValueUpdate. nil action)}))
+
+(defn- to-attribute-updates [cmd]
+  (let [action (clojure.string/upper-case (name (key cmd)))
+        attributes (val cmd)]
+    (if (coll? attributes)
+      (map #(to-attribute-update action %) attributes)
+      (to-attribute-update action attributes))))
+
+(defn update-item
+  "Performs updates against matching keys supplied in req."
+  [cred table req]
+  (.updateItem
+   (db-client cred)
+   (doto (UpdateItemRequest.)
+    (.setTableName table)
+    (.setKey (item-key req))
+    (.setAttributeUpdates
+     (apply merge
+            (flatten
+             (map to-attribute-updates
+                  (filter #(some #{:add :delete :put} %) req))))))))
 
 (defn delete-item
   "Delete an item from a DynamoDB table by its hash key."
