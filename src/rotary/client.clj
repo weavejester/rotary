@@ -7,6 +7,7 @@
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
+            AttributeValueUpdate
             Condition
             CreateTableRequest
             UpdateTableRequest
@@ -16,6 +17,8 @@
             DeleteItemRequest
             GetItemRequest
             GetItemResult
+            UpdateItemRequest
+            UpdateItemResult
             Key
             KeySchema
             KeySchemaElement
@@ -216,20 +219,6 @@
   (as-map [result]
     (item-map (.getItem result))))
 
-
-
-(defn put-item
-  "Add an item (a Clojure map) to a DynamoDB table."
-  [cred table item]
-  (.putItem
-   (db-client cred)
-   (doto (PutItemRequest.)
-     (.setTableName table)
-     (.setItem
-      (into {}
-            (for [[k v] item]
-              [(name k) (to-attr-value v)]))))))
-
 (defn- item-key
   "Create a Key object from a value."
   [{:keys [hash-key range-key]}]
@@ -249,6 +238,44 @@
     (doto (GetItemRequest.)
       (.setTableName table)
       (.setKey (item-key {:hash-key hash-key}))))))
+
+(defn put-item
+  "Add an item (a Clojure map) to a DynamoDB table."
+  [cred table item]
+  (.putItem
+   (db-client cred)
+   (doto (PutItemRequest.)
+     (.setTableName table)
+     (.setItem
+      (into {}
+            (for [[k v] item]
+              [(name k) (to-attr-value v)]))))))
+
+(defn- to-attribute-update [action attribute]
+  (if (vector? attribute)
+    {(name (first attribute)) (AttributeValueUpdate. (to-attr-value (second attribute)) action)}
+    {(name attribute) (AttributeValueUpdate. nil action)}))
+
+(defn- to-attribute-updates [cmd]
+  (let [action (clojure.string/upper-case (name (key cmd)))
+        attributes (val cmd)]
+    (if (coll? attributes)
+      (map #(to-attribute-update action %) attributes)
+      (to-attribute-update action attributes))))
+
+(defn update-item
+  "Performs updates against matching keys supplied in req."
+  [cred table req]
+  (.updateItem
+   (db-client cred)
+   (doto (UpdateItemRequest.)
+    (.setTableName table)
+    (.setKey (item-key req))
+    (.setAttributeUpdates
+     (apply merge
+            (flatten
+             (map to-attribute-updates
+                  (filter #(some #{:add :delete :put} %) req))))))))
 
 (defn delete-item
   "Delete an item from a DynamoDB table by its hash key."
