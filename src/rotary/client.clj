@@ -7,6 +7,12 @@
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
+            BatchGetItemRequest
+            BatchGetItemResult
+            BatchResponse
+            BatchWriteItemRequest
+            BatchWriteItemResult
+            BatchWriteResponse
             Condition
             CreateTableRequest
             UpdateTableRequest
@@ -14,17 +20,21 @@
             DescribeTableResult
             DeleteTableRequest
             DeleteItemRequest
+            DeleteRequest
             GetItemRequest
             GetItemResult
-            Key
+            Key            
             KeySchema
             KeySchemaElement
+            KeysAndAttributes
             ProvisionedThroughput
             ProvisionedThroughputDescription
             PutItemRequest
+            PutRequest
             ResourceNotFoundException
             ScanRequest
-            QueryRequest]))
+            QueryRequest
+            WriteRequest]))
 
 (defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
@@ -40,6 +50,18 @@
 
 (defprotocol AsMap
   (as-map [x]))
+
+(defn- to-long [x] (Long. x))
+
+(defn- get-value
+  "Get the value of an AttributeValue object."
+  [attr-value]
+  (if (nil? attr-value)
+    nil
+    (or (.getS attr-value)
+        (-?>> (.getN attr-value)  to-long)
+        (-?>> (.getNS attr-value) (map to-long) (into #{}))
+        (-?>> (.getSS attr-value) (into #{})))))
 
 (defn- key-schema-element
   "Create a KeySchemaElement object."
@@ -131,7 +153,30 @@
        :throughput    (as-map (.getProvisionedThroughput table))
        :status        (-> (.getTableStatus table)
                           (str/lower-case)
-                          (keyword))})))
+                          (keyword))}))
+  BatchWriteResponse
+  (as-map [result]
+    {:consumed-capacity-units (.getConsumedCapacityUnits result)})
+  BatchWriteItemResult
+  (as-map [result]    
+    {:responses        (fmap as-map (into {} (.getResponses result)))                        
+    :unprocessed-items (.getUnprocessedItems result)})
+  BatchResponse
+  (as-map [result]
+    {:consumed-capacity-units (.getConsumedCapacityUnits result)
+     :items (-?>> (.getItems result) 
+                  (into []) 
+                  (fmap #(fmap get-value (into {} %))))})
+  KeysAndAttributes
+  (as-map [result]
+    (merge
+      (if-let [a (.getAttributesToGet result)] {:attrs (into [] a)} {})
+      (if-let [c (.getConsistentRead result)]  {:consistent c} nil)
+      (if-let [k (.getKeys result)]            {:keys (fmap as-map (into [] k))} {})))
+  BatchGetItemResult
+  (as-map [result]
+    {:responses        (fmap as-map (into {} (.getResponses result)))
+     :unprocessed-keys (fmap as-map (into {} (.getUnprocessedKeys result)))}))
 
 (defn describe-table
   "Returns a map describing the table in DynamoDB with the given name, or nil
@@ -180,16 +225,6 @@
    (set-of number? value) (doto (AttributeValue.) (.setNS (map str value)))
    (set? value)    (throw (Exception. "Set must be all numbers or all strings"))
    :else           (throw (Exception. (str "Unknown value type: " (type value))))))
-
-(defn- to-long [x] (Long. x))
-
-(defn- get-value
-  "Get the value of an AttributeValue object."
-  [attr-value]
-  (or (.getS attr-value)
-      (-?>> (.getN attr-value)  to-long)
-      (-?>> (.getNS attr-value) (map to-long) (into #{}))
-      (-?>> (.getSS attr-value) (into #{}))))
 
 (defn- item-map
   "Turn a item in DynamoDB into a Clojure map."
@@ -249,6 +284,96 @@
   nil
   (as-map [_] nil))
 
+(defn- extract-item-keys [keys]
+  (let [ik (or (:items keys) keys)
+        item-keys (if (map? ik)               ; passing a list as the last arg in the
+                    (first (apply vector ik)) ; api call somehow results in a map here
+                    ik)]
+    (map #(if-not (map? %)
+           {:hash-key %} %) item-keys)))
+
+(defn- keys-and-attrs
+  [{:keys [consistent attrs] :as item-keys}]
+  "Takes a map of complex hashes, with key :hash-key "
+  "Create a KeysAndAttributes object."
+  (doto (KeysAndAttributes.)
+    (.setAttributesToGet attrs)
+    (.setConsistentRead consistent)
+    (.setKeys (map item-key
+                   (extract-item-keys item-keys)))))
+
+(defn- extract-keys [table & [item-keys]]
+  (if (map? table)
+    (fmap keys-and-attrs table)
+    (hash-map (name table)
+              (keys-and-attrs item-keys))))
+
+(defn batch-get-item
+  "Retrieve a batch of items in a single request. DynamoDB limits
+   apply - 100 items and 1MB total size limit. Requested items
+   which were elided by Amazon are available in the returned map
+   key :unprocessed-keys. item-keys is a map of :table-name => col
+   of maps with keys :hash-key [and :range-key]."
+  [cred table & [item-keys]]
+    (as-map
+      (.batchGetItem
+        (db-client cred)
+        (doto (BatchGetItemRequest.)
+          (.setRequestItems
+            (extract-keys table item-keys))))))
+
+(defn- delete-request [item]
+  "Create a DeleteRequest object."
+  (doto (DeleteRequest.)
+    (.setKey (item-key item))))
+
+(defn- put-request [item]
+  "Create a PutRequest object."
+  (doto (PutRequest.)
+    (.setItem
+      (into {}
+        (for [[id field] item]
+          (assoc {}
+            (name id)
+            (to-attr-value field)))))))
+
+(defn- write-request [verb item]
+  (let [wr (WriteRequest.)]
+    (cond
+      (= :delete verb)
+        (.setDeleteRequest wr (delete-request item))
+      (= :put verb)
+        (.setPutRequest wr (put-request item)))
+    wr))
+
+(defn batch-write-item
+  "Execute a batch of Puts xor Deletes in a single request.
+   DynamoDB limits apply - 25 items max. No transaction
+   guarantees are provided, nor conditional puts.
+   
+   Usage:
+    (batch-write-item cred 
+                      :put 
+                      {:table [{:key \"foo\" :field \"bar\"} 
+                               {:key \"baz\" :field \"boz\"}]})
+    (batch-write-item cred 
+                      :delete 
+                      {:table [{:hash-key \"foo\"} 
+                               {:hash-key \"baz\"}]})"
+  [cred verb item-list]
+    (as-map
+      (.batchWriteItem
+        (db-client cred)
+        (doto (BatchWriteItemRequest.)
+          (.setRequestItems
+            (into {}
+              (for [[table items] item-list]
+                (assoc {}
+                  (name table)
+                  (reduce
+                    #(conj %1 (write-request verb %2))
+                    [] items)))))))))
+                    
 (defn- result-map [results]
   {:items    (map item-map (.getItems results))
    :count    (.getCount results)
