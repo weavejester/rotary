@@ -157,8 +157,8 @@
     {:consumed-capacity-units (.getConsumedCapacityUnits result)})
   BatchWriteItemResult
   (as-map [result]    
-    {:responses        (fmap as-map (into {} (.getResponses result)))                        
-    :unprocessed-items (.getUnprocessedItems result)})
+    {:responses         (fmap as-map (into {} (.getResponses result)))
+     :unprocessed-items (.getUnprocessedItems result)})
   BatchResponse
   (as-map [result]
     {:consumed-capacity-units (.getConsumedCapacityUnits result)
@@ -354,15 +354,15 @@
   (as-map
     (.batchWriteItem
       (db-client cred)
-        (doto (BatchWriteItemRequest.)
-          (.setRequestItems
-            (fmap
-              (fn [reqs]
-                (reduce
-                  #(conj %1 (write-request (first %2) (last %2)))
-                  []
-                  (partition 3 (flatten reqs))))
-              (group-by #(name (second %)) requests)))))))
+      (doto (BatchWriteItemRequest.)
+        (.setRequestItems
+         (fmap
+          (fn [reqs]
+            (reduce
+             #(conj %1 (write-request (first %2) (last %2)))
+             []
+             (partition 3 (flatten reqs))))
+          (group-by #(name (second %)) requests)))))))
 
 (defn- result-map [results]
   {:items    (map item-map (.getItems results))
