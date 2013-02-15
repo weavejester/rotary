@@ -53,8 +53,9 @@
 
 (defn- to-long [x] (Long. x))
 
-(defn- get-value [attr-value]
+(defn- get-value
   "Get the value of an AttributeValue object."  
+  [attr-value]
   (or (.getS attr-value)
       (-?>> (.getN attr-value)  to-long)
       (-?>> (.getNS attr-value) (map to-long) (into #{}))
@@ -287,8 +288,6 @@
            {:hash-key %} %) item-keys)))
 
 (defn- keys-and-attrs [item-keys]
-  "Takes a map of complex hashes, with key :hash-key "
-  "Create a KeysAndAttributes object."
   (doto (KeysAndAttributes.)
     (.setAttributesToGet (:attrs item-keys))
     (.setConsistentRead (:consistent item-keys))
@@ -302,7 +301,7 @@
     (hash-map (name table)
               (keys-and-attrs item-keys))))
 
-(defn batch-get-item [cred table & [item-keys]]
+(defn batch-get-item
   "Retrieve a batch of items in a single request. DynamoDB limits
    apply - 100 items and 1MB total size limit. Requested items
    which were elided by Amazon are available in the returned map
@@ -315,6 +314,7 @@
        :consistent true
        :attrs [\"id\" \"username\"]
        :keys [1 2 3 4]}})"
+  [cred table & [item-keys]]
   (as-map
     (.batchGetItem
       (db-client cred)
@@ -340,7 +340,7 @@
       :put    (.setPutRequest wr (put-request item)))
     wr))
 
-(defn batch-write-item [cred & requests]
+(defn batch-write-item
   "Execute a batch of Puts and/or Deletes in a single request.
    DynamoDB limits apply - 25 items max. No transaction
    guarantees are provided, nor conditional puts.
@@ -350,6 +350,7 @@
       [:put    :users {:user-id 1 :username \"sally\"}]
       [:put    :users {:user-id 2 :username \"jane\"}]
       [:delete :users {:hash-key 3}])"
+  [cred & requests]
   (as-map
     (.batchWriteItem
       (db-client cred)
@@ -404,8 +405,9 @@
                              (.withComparisonOperator operator)
                              (.withAttributeValueList attribute-list)))))
 
-(defn- normalize-operator [operator]
+(defn- normalize-operator
   "Maps Clojure operators to DynamoDB operators"
+  [operator]
   (let [operator-map {:> "GT" :>= "GE" :< "LT" :<= "LE" := "EQ"}
         op (->> operator name str/upper-case)]
     (operator-map (keyword op) op)))
