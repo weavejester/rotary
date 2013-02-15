@@ -309,11 +309,10 @@
 
    Usage:
    (batch-get-item cred table [1 2 3 4])
-   (batch-get-item cred {
-     table {
-       :consistent true
-       :attrs [\"id\" \"username\"]
-       :keys [1 2 3 4]}})"
+   (batch-get-item cred
+    {table {:consistent true
+            :attrs [\"id\" \"username\"]
+            :keys [1 2 3 4]}})"
   [cred table & [item-keys]]
   (as-map
     (.batchGetItem
