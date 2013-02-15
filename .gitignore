@@ -6,5 +6,6 @@ pom.xml.asc
 .lein-failures
 .lein-deps-sum
 .lein-env
+.lein-repl-history
 /doc
 /target
