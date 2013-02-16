@@ -307,12 +307,12 @@
    which were elided by Amazon are available in the returned map
    key :unprocessed-keys. 
 
-   Usage:
-   (batch-get-item cred table [1 2 3 4])
+   Examples:
+   (batch-get-item cred :users [1 2 3 4])
    (batch-get-item cred
-    {table {:consistent true
-            :attrs [\"id\" \"username\"]
-            :keys [1 2 3 4]}})"
+    {:users {:attrs [\"id\" \"username\"]
+             :keys [1 2 3 4]
+             :consistent true}})"
   [cred table & [item-keys]]
   (as-map
     (.batchGetItem
@@ -344,11 +344,11 @@
    DynamoDB limits apply - 25 items max. No transaction
    guarantees are provided, nor conditional puts.
    
-   Usage:
-    (batch-write-item cred
-      [:put    :users {:user-id 1 :username \"sally\"}]
-      [:put    :users {:user-id 2 :username \"jane\"}]
-      [:delete :users {:hash-key 3}])"
+   Example:
+   (batch-write-item cred
+     [:put :users {:user-id 1 :username \"sally\"}]
+     [:put :users {:user-id 2 :username \"jane\"}]
+     [:delete :users {:hash-key 3}])"
   [cred & requests]
   (as-map
     (.batchWriteItem
