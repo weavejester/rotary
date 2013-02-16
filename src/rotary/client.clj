@@ -282,24 +282,25 @@
   nil
   (as-map [_] nil))
 
-(defn- extract-item-keys [keys]
-  (let [item-keys (or (:items keys) keys)]
-    (map #(if-not (map? %)
-           {:hash-key %} %) item-keys)))
+(defn- batch-item-keys [request-or-keys]
+  (for [key (:keys request-or-keys request-or-keys)]
+    (if (map? key)
+      (item-key key)
+      (item-key {:hash-key key}))))
 
-(defn- keys-and-attrs [item-keys]
-  (doto (KeysAndAttributes.)
-    (.setAttributesToGet (:attrs item-keys))
-    (.setConsistentRead (:consistent item-keys))
-    (.setKeys (map item-key
-                   (extract-item-keys
-                     (or (:keys item-keys) item-keys))))))
+(defn- keys-and-attrs [{:keys [attrs consistent] :as request}]
+  (let [kaa (KeysAndAttributes.)]
+    (.setKeys kaa (batch-item-keys request))
+    (when attrs
+      (.setAttributesToGet kaa attrs))
+    (when consistent
+      (.setConsistentRead kaa consistent))
+    kaa))
 
-(defn- extract-keys [table & [item-keys]]
-  (if (map? table)
-    (fmap keys-and-attrs table)
-    (hash-map (name table)
-              (keys-and-attrs item-keys))))
+(defn- batch-request-items [requests]
+  (into {}
+    (for [[k v] requests]
+      [(name k) (keys-and-attrs v)])))
 
 (defn batch-get-item
   "Retrieve a batch of items in a single request. DynamoDB limits
@@ -308,18 +309,17 @@
    key :unprocessed-keys. 
 
    Examples:
-   (batch-get-item cred :users [1 2 3 4])
    (batch-get-item cred
-    {:users {:attrs [\"id\" \"username\"]
-             :keys [1 2 3 4]
-             :consistent true}})"
-  [cred table & [item-keys]]
+     {:users [\"alice\" \"bob\"]
+      :posts {:keys [1 2 3]
+              :attrs [\"timestamp\" \"subject\"]
+              :consistent true}})"
+  [cred requests]
   (as-map
     (.batchGetItem
       (db-client cred)
       (doto (BatchGetItemRequest.)
-        (.setRequestItems
-          (extract-keys table item-keys))))))
+        (.setRequestItems (batch-request-items requests))))))
 
 (defn- delete-request [item]
   (doto (DeleteRequest.)
