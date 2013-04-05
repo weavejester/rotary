@@ -3,7 +3,8 @@
   (:use [clojure.algo.generic.functor :only (fmap)]
         [clojure.core.incubator :only (-?>>)])
   (:require [clojure.string :as str])
-  (:import com.amazonaws.auth.BasicAWSCredentials
+  (:import com.amazonaws.ClientConfiguration
+           com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodb.AmazonDynamoDBClient
            [com.amazonaws.services.dynamodb.model
             AttributeValue
@@ -38,12 +39,19 @@
 
 (defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
-  [cred]
-  (let [aws-creds (BasicAWSCredentials. (:access-key cred) (:secret-key cred))
-        client (AmazonDynamoDBClient. aws-creds)]
-    (when-let [endpoint (:endpoint cred)]
-      (.setEndpoint client endpoint))
-    client))
+  [{:keys [access-key secret-key endpoint proxy-host proxy-port]}]
+  (let [aws-creds (BasicAWSCredentials. access-key secret-key)
+        client-configuration (when (and proxy-host proxy-port) (ClientConfiguration.))]
+    (when client-configuration
+      (doto client-configuration
+        (.setProxyHost proxy-host)
+        (.setProxyPort proxy-port)))
+    (let [client (if client-configuration
+                   (AmazonDynamoDBClient. aws-creds client-configuration)
+                   (AmazonDynamoDBClient. aws-creds))]
+      (when endpoint
+        (.setEndpoint client endpoint))
+      client)))
 
 (def db-client
   (memoize db-client*))
