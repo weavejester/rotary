@@ -40,17 +40,14 @@
 (defn- db-client*
   "Get a AmazonDynamoDBClient instance for the supplied credentials."
   [{:keys [access-key secret-key endpoint proxy-host proxy-port]}]
-  (let [aws-creds (BasicAWSCredentials. access-key secret-key)
-        client-configuration (when (and proxy-host proxy-port) (ClientConfiguration.))]
-    (when client-configuration
-      (doto client-configuration
+  (let [aws-creds     (BasicAWSCredentials. access-key secret-key)
+        client-config (ClientConfiguration.)]
+    (when (and proxy-host proxy-port)
+      (doto client-config
         (.setProxyHost proxy-host)
         (.setProxyPort proxy-port)))
-    (let [client (if client-configuration
-                   (AmazonDynamoDBClient. aws-creds client-configuration)
-                   (AmazonDynamoDBClient. aws-creds))]
-      (when endpoint
-        (.setEndpoint client endpoint))
+    (let [client (AmazonDynamoDBClient. aws-creds client-config)]
+      (when endpoint (.setEndpoint client endpoint))
       client)))
 
 (def db-client
