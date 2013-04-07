@@ -42,10 +42,8 @@
   [{:keys [access-key secret-key endpoint proxy-host proxy-port]}]
   (let [aws-creds     (BasicAWSCredentials. access-key secret-key)
         client-config (ClientConfiguration.)]
-    (when (and proxy-host proxy-port)
-      (doto client-config
-        (.setProxyHost proxy-host)
-        (.setProxyPort proxy-port)))
+    (when proxy-host (.setProxyHost client-config proxy-host))
+    (when proxy-port (.setProxyPort client-config proxy-port))
     (let [client (AmazonDynamoDBClient. aws-creds client-config)]
       (when endpoint (.setEndpoint client endpoint))
       client)))
