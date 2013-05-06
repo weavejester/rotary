@@ -4,15 +4,14 @@
         [clojure.core.incubator :only (-?>>)])
   (:require [clojure.string :as str])
   (:import com.amazonaws.auth.BasicAWSCredentials
-           com.amazonaws.services.dynamodb.AmazonDynamoDBClient
-           [com.amazonaws.services.dynamodb.model
+           com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
+           [com.amazonaws.services.dynamodbv2.model
             AttributeValue
+            AttributeDefinition
             BatchGetItemRequest
             BatchGetItemResult
-            BatchResponse
             BatchWriteItemRequest
             BatchWriteItemResult
-            BatchWriteResponse
             Condition
             CreateTableRequest
             UpdateTableRequest
@@ -23,10 +22,10 @@
             DeleteRequest
             GetItemRequest
             GetItemResult
-            Key            
-            KeySchema
             KeySchemaElement
             KeysAndAttributes
+            LocalSecondaryIndex
+            Projection
             ProvisionedThroughput
             ProvisionedThroughputDescription
             PutItemRequest
@@ -63,18 +62,18 @@
 
 (defn- key-schema-element
   "Create a KeySchemaElement object."
-  [{key-name :name, key-type :type}]
+  [key-name key-type]
   (doto (KeySchemaElement.)
     (.setAttributeName (str key-name))
-    (.setAttributeType (str/upper-case (name key-type)))))
+    (.setKeyType (str/upper-case (name key-type)))))
 
 (defn- key-schema
   "Create a KeySchema object."
   [hash-key & [range-key]]
-  (let [schema (KeySchema. (key-schema-element hash-key))]
-    (when range-key
-      (.setRangeKeyElement schema (key-schema-element range-key)))
-    schema))
+  (let [schema [(key-schema-element (:name hash-key) :hash)]]
+    (if-not (nil? range-key)
+      (conj schema (key-schema-element (:name range-key) :range))
+      schema)))
 
 (defn- provisioned-throughput
   "Created a ProvisionedThroughput object."
@@ -83,32 +82,86 @@
     (.setReadCapacityUnits (long read-units))
     (.setWriteCapacityUnits (long write-units))))
 
+(defn- create-projection
+  "Creates a Projection Object"
+  [projection & [included-attrs]]
+  (let [pr (Projection.)]
+    (.setProjectionType pr (str/upper-case (name projection)))
+    (when included-attrs
+      (.setNonKeyAttributes pr included-attrs))
+    pr))
+
+(defn- local-index
+  "Creates a LocalSecondaryIndex Object"
+  [hash-key {:keys [name range-key projection included-attrs] :or {projection :all}}]
+  (doto (LocalSecondaryIndex.)
+    (.setIndexName name)
+    (.setKeySchema 
+      (key-schema hash-key range-key))
+    (.setProjection 
+      (create-projection projection included-attrs))))
+
+(defn- local-indexes
+  "Creates a vector of LocalSecondaryIndexes"
+  [hash-key indexes]
+  (loop [is indexes acc []]
+    (if (empty? is)
+      acc
+      (recur (rest is) (conj acc (local-index hash-key (first is)))))))
+
+(defn- attribute-defintion
+  "Creates an AttributeDefinition Object"
+  [{key-name :name key-type :type}]
+  (doto (AttributeDefinition.)
+    (.setAttributeName key-name)
+    (.setAttributeType (str/upper-case (name key-type)))))
+
+(defn- attribute-definitions
+  "Creates a vector of AttributeDefinition Objects"
+  [defs]
+  (loop [ds defs acc []]
+    (if (empty? ds)
+      acc
+      (recur (rest ds) (conj acc (attribute-defintion (first ds)))))))
+
 (defn create-table
   "Create a table in DynamoDB with the given map of properties. The properties
   available are:
     :name       - the name of the table (required)
-    :hash-key   - a map that defines the hash key name and type (required)
-    :range-key  - a map that defines the range key name and type (optional)
+    :hash-key - a map that defines the hash key name and type (required)
+    :range-key - a map that defines the range key name and type (optional) 
     :throughput - a map that defines the read and write throughput (required)
+    :indexes    - a vector of maps that defines local secondary indexes on a table (optional))
 
   The hash-key and range-key definitions are maps with the following keys:
     :name - the name of the key
-    :type - the type of the key (:s, :n, :ss, :ns)
-
-  Where :s is a string type, :n is a number type, and :ss and :ns are sets of
-  strings and number respectively.
+    :type - the type of the key (:s, :n, :ss, :ns) 
 
   The throughput is a map with two keys:
     :read  - the provisioned number of reads per second
-    :write - the provisioned number of writes per second"
-  [cred {:keys [name hash-key range-key throughput]}]
+    :write - the provisioned number of writes per second
+  
+  The indexes vector is a vector of maps with two keys and two further optional ones
+    :name - the name of the Local Secondary Index (required)
+    :range-key - a map that defines the range key name and type (required)
+    :projection - keyword that defines the projection may be: 
+                  :all, :keys_only, :include (optional - default is :keys-only)
+    :included-attrs - a vector of attribute names when :projection is :include (optional)"
+
+  [cred {:keys [name hash-key range-key throughput indexes]}]
   (.createTable
-   (db-client cred)
-   (doto (CreateTableRequest.)
-     (.setTableName (str name))
-     (.setKeySchema (key-schema hash-key range-key))
-     (.setProvisionedThroughput
-      (provisioned-throughput throughput)))))
+    (db-client cred)
+    (let [defined-attrs (->> (conj [] hash-key range-key)
+                             (concat (map #(:range-key %) indexes))
+                             (remove nil?))]
+      (doto (CreateTableRequest.)
+        (.setTableName (str name))
+        (.setKeySchema (key-schema hash-key range-key))
+        (.setAttributeDefinitions (attribute-definitions defined-attrs))
+        (.setProvisionedThroughput
+          (provisioned-throughput throughput))
+        (.setLocalSecondaryIndexes 
+          (local-indexes hash-key indexes))))))
 
 (defn update-table
   "Update a table in DynamoDB with the given name. Only the throughput may be
@@ -124,17 +177,18 @@
       (provisioned-throughput throughput)))))
 
 (extend-protocol AsMap
+  java.util.ArrayList
+  (as-map [alist]
+    (into [] (map as-map alist)))
+  java.util.HashMap
+  (as-map [hmap]
+    (fmap as-map (into {} hmap)))
+  AttributeValue
+  (as-map [aval]
+    (get-value aval))
   KeySchemaElement
   (as-map [element]
-    {:name (.getAttributeName element)
-     :type (-> (.getAttributeType element)
-               (str/lower-case)
-               (keyword))})
-  KeySchema
-  (as-map [schema]
-    (merge
-     (if-let [e (.getHashKeyElement schema)]  {:hash-key  (as-map e)} {})
-     (if-let [e (.getRangeKeyElement schema)] {:range-key (as-map e)} {})))
+    {:name (.getAttributeName element)})
   ProvisionedThroughputDescription
   (as-map [throughput]
     {:read  (.getReadCapacityUnits throughput)
@@ -152,19 +206,9 @@
        :status        (-> (.getTableStatus table)
                           (str/lower-case)
                           (keyword))}))
-  BatchWriteResponse
-  (as-map [result]
-    {:consumed-capacity-units (.getConsumedCapacityUnits result)})
   BatchWriteItemResult
   (as-map [result]    
-    {:responses         (fmap as-map (into {} (.getResponses result)))
-     :unprocessed-items (.getUnprocessedItems result)})
-  BatchResponse
-  (as-map [result]
-    {:consumed-capacity-units (.getConsumedCapacityUnits result)
-     :items (-?>> (.getItems result) 
-                  (into []) 
-                  (fmap #(fmap get-value (into {} %))))})
+    {:unprocessed-items (into {} (.getUnprocessedItems result))})
   KeysAndAttributes
   (as-map [result]
     (merge
@@ -173,8 +217,8 @@
       (if-let [k (.getKeys result)]            {:keys (fmap as-map (into [] k))} {})))
   BatchGetItemResult
   (as-map [result]
-    {:responses        (fmap as-map (into {} (.getResponses result)))
-     :unprocessed-keys (fmap as-map (into {} (.getUnprocessedKeys result)))}))
+    {:responses        (fmap #(as-map %) (into {} (.getResponses result)))
+     :unprocessed-keys (into {} (.getUnprocessedKeys result))}))
 
 (defn describe-table
   "Returns a map describing the table in DynamoDB with the given name, or nil
@@ -248,45 +292,35 @@
               [(name k) (to-attr-value v)]))))))
 
 (defn- item-key
-  "Create a Key object from a value."
-  [{:keys [hash-key range-key]}]
-  (let [key (Key.)]
-    (when hash-key
-      (.setHashKeyElement key (to-attr-value hash-key)))
-    (when range-key
-      (.setRangeKeyElement key (to-attr-value range-key)))
-    key))
+  "Create a new Key Map"
+  [key]
+  (into {} (map (fn [[k v]] {(name k) (to-attr-value v)}) key)))
 
 (defn get-item
-  "Retrieve an item from a DynamoDB table by its hash key."
+  "Retrieve an item from a DynamoDB table by its hash key.
+  hash-key should be specified as a map of {:attr-name value}."
   [cred table hash-key]
   (as-map
    (.getItem
     (db-client cred)
     (doto (GetItemRequest.)
       (.setTableName table)
-      (.setKey (item-key {:hash-key hash-key}))))))
+      (.setKey (item-key hash-key))))))
 
 (defn delete-item
   "Delete an item from a DynamoDB table by its hash key."
   [cred table hash-key]
   (.deleteItem
    (db-client cred)
-   (DeleteItemRequest. table (item-key {:hash-key hash-key}))))
+   (DeleteItemRequest. table (item-key hash-key))))
 
 (extend-protocol AsMap
-  Key
-  (as-map [k]
-    {:hash-key  (get-value (.getHashKeyElement k))
-     :range-key (get-value (.getRangeKeyElement k))})
   nil
   (as-map [_] nil))
 
 (defn- batch-item-keys [request-or-keys]
   (for [key (:keys request-or-keys request-or-keys)]
-    (if (map? key)
-      (item-key key)
-      (item-key {:hash-key key}))))
+    (item-key {(:key-name request-or-keys) key})))
 
 (defn- keys-and-attrs [{:keys [attrs consistent] :as request}]
   (let [kaa (KeysAndAttributes.)]
@@ -310,8 +344,10 @@
 
    Examples:
    (batch-get-item cred
-     {:users [\"alice\" \"bob\"]
-      :posts {:keys [1 2 3]
+     {:users {:keys [\"alice\" \"bob\"]
+              :key-name \"names\"}
+      :posts {:key-name \"id\"
+              :keys [1 2 3]
               :attrs [\"timestamp\" \"subject\"]
               :consistent true}})"
   [cred requests]
@@ -395,14 +431,20 @@
     (db-client cred)
     (scan-request table options))))
 
+(defn- set-hash-condition
+  "Create a map of specifying the hash-key condition for query"
+  [[hash-key hash-value]]
+  {hash-key (doto (Condition.)
+              (.withComparisonOperator "EQ")
+              (.withAttributeValueList (to-attr-value hash-value)))})
+
 (defn- set-range-condition
   "Add the range key condition to a QueryRequest object"
-  [query-request operator & [range-key range-end]]
-  (let [attribute-list (->> [range-key range-end] (remove nil?) (map to-attr-value))]
-    (.setRangeKeyCondition query-request
-                           (doto (Condition.)
-                             (.withComparisonOperator operator)
-                             (.withAttributeValueList attribute-list)))))
+  [range-key operator & [range-value range-end]]
+  (let [attribute-list (->> [range-value range-end] (remove nil?) (map to-attr-value))]
+    {range-key (doto (Condition.)
+                 (.withComparisonOperator operator)
+                 (.withAttributeValueList attribute-list))}))
 
 (defn- normalize-operator
   "Maps Clojure operators to DynamoDB operators"
@@ -414,10 +456,16 @@
 (defn- query-request
   "Create a QueryRequest object."
   [table hash-key range-clause {:keys [order limit after count consistent attrs]}]
-  (let [qr (QueryRequest. table (to-attr-value hash-key))
-        [operator range-key range-end] range-clause]
-    (when operator
-      (set-range-condition qr (normalize-operator operator) range-key range-end))
+  (let [qr (QueryRequest.)
+        hash-clause (set-hash-condition (seq hash-key))
+        [range-key operator range-value range-end] range-clause
+        query-conditions (if (nil? operator) [hash-clause]
+                           [hash-clause (set-range-condition range-key 
+                                                             (normalize-operator operator) 
+                                                             range-value
+                                                             range-end)])]
+    (.setTableName qr table)
+    (.setKeyConditions qr query-conditions)
     (when attrs
       (.setAttributesToGet qr (map name attrs)))
     (when order
@@ -438,8 +486,9 @@
     [range options]))
 
 (defn query
-  "Return the items in a DynamoDB table matching the supplied hash key.
-  Can specify a range clause if the table has a range-key ie. `(>= 234)
+  "Return the items in a DynamoDB table matching the supplied hash key,
+  defined in the form {\"hash-attr\" hash-value}.
+  Can specify a range clause if the table has a range-key ie. `(\"range-attr\" >= 234)
   Takes the following options:
     :order - may be :asc or :desc (defaults to :asc)
     :attrs - limit the values returned to the following attribute names
