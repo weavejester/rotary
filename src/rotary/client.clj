@@ -24,6 +24,8 @@
             GetItemResult
             KeySchemaElement
             KeysAndAttributes
+            LocalSecondaryIndex
+            Projection
             ProvisionedThroughput
             ProvisionedThroughputDescription
             PutItemRequest
@@ -80,7 +82,31 @@
     (.setReadCapacityUnits (long read-units))
     (.setWriteCapacityUnits (long write-units))))
 
-(defn- attribute-defintion
+(defn- create-projection
+  "Creates a Projection Object"
+  [projection & [included-attrs]]
+  (let [pr (Projection.)]
+    (.setProjectionType pr (str/upper-case (name projection)))
+    (when included-attrs
+      (.setNonKeyAttributes pr included-attrs))
+    pr))
+
+(defn- local-index
+  "Creates a LocalSecondaryIndex Object"
+  [hash-key {:keys [name range-key projection included-attrs] :or {projection :all}}]
+  (doto (LocalSecondaryIndex.)
+    (.setIndexName name)
+    (.setKeySchema
+      (key-schema hash-key range-key))
+    (.setProjection
+      (create-projection projection included-attrs))))
+
+(defn- local-indexes
+  "Creates a vector of LocalSecondaryIndexes"
+  [hash-key indexes]
+  (map (partial local-index hash-key) indexes))
+
+(defn- attribute-definition
   "Creates an AttributeDefinition Object"
   [{key-name :name key-type :type}]
   (doto (AttributeDefinition.)
@@ -90,10 +116,7 @@
 (defn- attribute-definitions
   "Creates a vector of AttributeDefinition Objects"
   [defs]
-  (loop [ds defs acc []]
-    (if (empty? ds)
-      acc
-      (recur (rest ds) (conj acc (attribute-defintion (first ds)))))))
+  (map attribute-definition defs))
 
 (defn create-table
   "Create a table in DynamoDB with the given map of properties. The properties
@@ -102,25 +125,39 @@
     :hash-key - a map that defines the hash key name and type (required)
     :range-key - a map that defines the range key name and type (optional)
     :throughput - a map that defines the read and write throughput (required)
+    :indexes - a vector of maps that defines local secondary indexes on a table (optional)
 
   The hash-key and range-key definitions are maps with the following keys:
     :name - the name of the key
     :type - the type of the key (:s, :n, :ss, :ns)
 
+  Where :s is a string type, :n is a number type, and :ss and :ns are sets of
+  strings and number respectively. 
+
   The throughput is a map with two keys:
     :read - the provisioned number of reads per second
-    :write - the provisioned number of writes per second"
-  [cred {:keys [name hash-key range-key throughput]}]
+    :write - the provisioned number of writes per second
+  
+  The indexes vector is a vector of maps with two keys and two further optional ones
+    :name - the name of the Local Secondary Index (required)
+    :range-key - a map that defines the range key name and type (required)
+    :projection - keyword that defines the projection may be:
+    :all, :keys_only, :include (optional - default is :keys-only)
+    :included-attrs - a vector of attribute names when :projection is :include (optional)"
+  [cred {:keys [name hash-key range-key throughput indexes]}]
   (.createTable
     (db-client cred)
     (let [defined-attrs (->> (conj [] hash-key range-key)
+                             (concat (map #(:range-key %) indexes))
                              (remove nil?))]
       (doto (CreateTableRequest.)
         (.setTableName (str name))
         (.setKeySchema (key-schema hash-key range-key))
         (.setAttributeDefinitions (attribute-definitions defined-attrs))
         (.setProvisionedThroughput
-          (provisioned-throughput throughput))))))
+          (provisioned-throughput throughput))
+        (.setLocalSecondaryIndexes
+          (local-indexes hash-key indexes))))))
 
 (defn update-table
   "Update a table in DynamoDB with the given name. Only the throughput may be
@@ -415,7 +452,7 @@
 
 (defn- query-request
   "Create a QueryRequest object."
-  [table hash-key range-clause {:keys [order limit after count consistent attrs]}]
+  [table hash-key range-clause {:keys [order limit after count consistent attrs index]}]
   (let [qr (QueryRequest.)
         hash-clause (set-hash-condition hash-key)
         [range-key operator range-value range-end] range-clause
@@ -439,6 +476,8 @@
       (.setConsistentRead qr consistent))
     (when after
       (.setExclusiveStartKey qr (item-key after)))
+    (when index
+      (.setIndexName qr index))
     qr))
 
 (defn- extract-range [[range options]]
@@ -456,6 +495,7 @@
     :limit - the maximum number of items to return
     :after - only return results after this key
     :consistent - return a consistent read if logical true
+    :index - the secondary index to query
 
   The items are returned as a map with the following keys:
     :items - the list of items returned
