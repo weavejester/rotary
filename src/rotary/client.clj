@@ -395,7 +395,6 @@
           (group-by #(name (second %)) requests)))))))
 
 (defn- result-map [results]
-  (println results)
   {:items (map item-map (.getItems results))
    :count (.getCount results)
    :last-key (as-map (.getLastEvaluatedKey results))})
