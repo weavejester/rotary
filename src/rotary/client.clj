@@ -5,6 +5,7 @@
   (:require [clojure.string :as str])
   (:import com.amazonaws.auth.BasicAWSCredentials
            com.amazonaws.services.dynamodbv2.AmazonDynamoDBClient
+           com.amazonaws.ClientConfiguration
            [com.amazonaws.services.dynamodbv2.model
             AttributeValue
             AttributeDefinition
@@ -35,14 +36,26 @@
             QueryRequest
             WriteRequest]))
 
+(defn- client-configuration
+  "Helper function that sets AWS client config options"
+  [{:keys [proxy-host proxy-port]}]
+    (let [conf (ClientConfiguration.)]
+      (when proxy-host (.setProxyHost conf proxy-host))
+      (when proxy-port (.setProxyPort conf proxy-port))
+        conf))
+
 (defn- db-client*
-  "Get a AmazonDynamoDBClient instance for the supplied credentials."
+  "Get a AmazonDynamoDBClient instance for the supplied credentials.
+   Can optionally include a :client-config key for setting
+   proxy options"
   [cred]
   (let [aws-creds (BasicAWSCredentials. (:access-key cred) (:secret-key cred))
-        client (AmazonDynamoDBClient. aws-creds)]
+        client (if-let [client-config (:client-config cred)]
+                 (AmazonDynamoDBClient. aws-creds (client-configuration client-config))
+                 (AmazonDynamoDBClient. aws-creds))]
     (when-let [endpoint (:endpoint cred)]
       (.setEndpoint client endpoint))
-    client))
+      client))
 
 (def db-client
   (memoize db-client*))
@@ -132,12 +145,12 @@
     :type - the type of the key (:s, :n, :ss, :ns)
 
   Where :s is a string type, :n is a number type, and :ss and :ns are sets of
-  strings and number respectively. 
+  strings and number respectively.
 
   The throughput is a map with two keys:
     :read - the provisioned number of reads per second
     :write - the provisioned number of writes per second
-  
+
   The indexes vector is a vector of maps with two keys and two further optional ones
     :name - the name of the Local Secondary Index (required)
     :range-key - a map that defines the range key name and type (required)
@@ -455,7 +468,7 @@
   (let [qr (QueryRequest.)
         hash-clause (set-hash-condition hash-key)
         [range-key operator range-value range-end] range-clause
-        query-conditions (if (nil? operator) 
+        query-conditions (if (nil? operator)
                            hash-clause
                            (merge hash-clause (set-range-condition range-key
                                                                    (normalize-operator operator)
